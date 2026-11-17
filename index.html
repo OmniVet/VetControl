@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EstoquePlus</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- LOGIN -->
+  <section id="login" class="login hidden">
+    <form id="loginForm" class="card login-card">
+      <h1>Estoque<span>Plus</span></h1>
+      <p class="muted">Entre com seu usuário</p>
+      <label>E-mail<input type="email" name="email" required /></label>
+      <label>Senha<input type="password" name="senha" required /></label>
+      <button class="btn primary" type="submit">Entrar</button>
+      <a href="#" id="esqueci" class="muted small">Esqueci minha senha</a>
+      <p id="loginErro" class="erro"></p>
+    </form>
+  </section>
+
+  <!-- APP -->
+  <div id="app" class="hidden">
+    <header class="topbar">
+      <div class="logo">Estoque<span>Plus</span></div>
+      <nav id="menu">
+        <a href="#painel" data-sec="painel">Início</a>
+        <a href="#produtos" data-sec="estoque">1 · Estoque <span id="badgeAlerta" class="tag critico hidden"></span></a>
+        <a href="#planilha" data-sec="exames">2 · Exames</a>
+        <a href="#inventario" data-sec="inventario">3 · Inventário</a>
+        <a href="#solicitacoes" data-sec="pedidos">4 · Pedidos <span id="badgeSol" class="tag critico hidden"></span></a>
+        <a href="#relatorios" data-sec="relatorios">5 · Relatórios</a>
+        <a href="#orcamento" data-sec="orcamentos">6 · Orçamentos</a>
+        <a href="#vacinas" data-sec="vacinas">7 · Vacinas</a>
+        <a href="#ambulatorio" data-sec="ambulatorio">8 · Ambulatório</a>
+        <a href="#usuarios" data-sec="config" class="so-master">⚙️ Usuários</a>
+      </nav>
+      <div class="user"><span id="userNome"></span> <button id="sair" class="btn small">Sair</button></div>
+    </header>
+    <div id="subnav" class="subnav"></div>
+    <main id="view"></main>
+  </div>
+
+  <!-- MODAL -->
+  <div id="modal" class="modal hidden">
+    <form id="modalForm" class="card modal-card">
+      <h2 id="modalTitulo"></h2>
+      <div id="modalCorpo"></div>
+      <p id="modalErro" class="erro"></p>
+      <div class="acoes">
+        <button type="button" class="btn" id="modalCancelar">Cancelar</button>
+        <button type="submit" class="btn primary" id="modalOk">Salvar</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cartão de Vacina Online</title>
+  <style>
+    :root{--azul:#1565c0;--escuro:#0d3c78;--claro:#e3f0fc;--verde:#1f9d55;--amarelo:#d69e2e;--vermelho:#d64545}
+    *{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f4f7fb;color:#1f2937}
+    .hidden{display:none!important}
+    header{background:linear-gradient(135deg,var(--azul),var(--escuro));color:#fff;padding:18px 16px;text-align:center}
+    header h1{margin:0;font-size:1.3rem}header p{margin:4px 0 0;opacity:.85;font-size:.9rem}
+    main{max-width:860px;margin:auto;padding:16px}
+    .card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 2px 10px #0d3c7815;margin-bottom:14px}
+    label{display:flex;flex-direction:column;gap:4px;font-size:.9rem;margin-bottom:12px}
+    input{padding:12px;border:1px solid #d6dde6;border-radius:10px;font-size:1.05rem}
+    .btn{display:block;width:100%;padding:13px;border:0;border-radius:10px;background:var(--azul);color:#fff;font-size:1rem;font-weight:600;cursor:pointer;text-align:center;text-decoration:none}
+    .btn.sec{background:#fff;color:var(--azul);border:1px solid var(--azul)}.btn.wa{background:#25d366}
+    .erro{color:var(--vermelho);min-height:1em}.muted{color:#6b7280;font-size:.85rem}
+    .pet h2{margin:0;color:var(--escuro)}.pet .info{color:#6b7280;font-size:.9rem;margin-bottom:10px}
+    .vac{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid #eef1f5;gap:8px}
+    .vac b{display:block}.tag{padding:3px 9px;border-radius:99px;font-size:.75rem;font-weight:700;white-space:nowrap}
+    .ok{background:#e3f6ec;color:var(--verde)}.alerta{background:#fdf3dc;color:var(--amarelo)}.critico{background:#fde8e8;color:var(--vermelho)}
+    details{margin-top:8px}summary{cursor:pointer;color:var(--azul);font-weight:600}
+    table{width:100%;border-collapse:collapse;font-size:.85rem}td,th{padding:6px 4px;border-bottom:1px solid #eef1f5;text-align:left}
+    .linha{display:flex;gap:8px}.linha .btn{flex:1}
+    @media print{header,.no-print{display:none!important}.card{box-shadow:none;border:1px solid #ccc;break-inside:avoid}}
+  </style>
+</head>
+<body>
+  <header><h1>💉 Cartão de Vacina Online</h1><p id="clinica"></p></header>
+  <main>
+    <form id="login" class="card hidden">
+      <p>Entre com o <b>CPF do tutor</b> e a senha que a clínica enviou.</p>
+      <label>CPF<input name="cpf" inputmode="numeric" autocomplete="username" placeholder="000.000.000-00" required></label>
+      <label>Senha<input name="senha" type="password" autocomplete="current-password" required></label>
+      <button class="btn" type="submit">Entrar</button>
+      <p class="erro" id="erro"></p>
+      <p class="muted">Esqueceu a senha? Peça uma nova à clínica pelo WhatsApp.</p>
+    </form>
+    <div id="area" class="hidden">
+      <div class="card no-print"><b id="ola"></b><div class="linha" style="margin-top:10px"><button class="btn sec" id="imprimir">Imprimir / PDF</button><button class="btn sec" id="trocar">Trocar senha</button><button class="btn sec" id="sair">Sair</button></div></div>
+      <div id="pets"></div>
+      <a class="btn wa no-print" id="agendar" target="_blank">Agendar vacina pelo WhatsApp</a>
+    </div>
+  </main>
+  <script type="module" src="tutor.js"></script>
+</body>
+</html>

@@ -1,0 +1,165 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ⚠️ Troque pelo SEU e-mail (o mesmo do firebase-config.js)
+    function masterEmail() { return "seu-email@exemplo.com"; }
+
+    function logado() { return request.auth != null; }
+    function perfil() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function temPerfil() { return logado() && exists(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function ativo() { return temPerfil() && perfil().ativo == true; }
+    function master() { return ativo() && perfil().role == "master"; }
+    function estoquista() { return ativo() && perfil().role in ["master", "estoquista"]; }
+
+    match /users/{uid} {
+      allow read: if ativo() || (logado() && request.auth.uid == uid);
+      // primeiro acesso do master cria o próprio perfil; demais só o master cria
+      allow create: if master() ||
+        (logado() && request.auth.uid == uid && request.auth.token.email == masterEmail()
+         && request.resource.data.role == "master");
+      allow update, delete: if master();
+    }
+
+    // Quantidades do estoque só mudam pela estoquista/master (equipe lança pendências)
+    match /produtos/{id} {
+      allow read: if ativo();
+      allow create: if ativo() && (estoquista() || request.resource.data.lotesEstoque.size() == 0);
+      allow update: if estoquista();
+      allow delete: if master();
+    }
+
+    match /salas/{sala}/itens/{id} {
+      allow read, write: if ativo();
+    }
+
+    // Histórico não pode ser alterado nem apagado (auditoria)
+    match /movimentos/{id} {
+      allow read, create: if ativo();
+      allow update, delete: if false;
+    }
+
+    match /pedidos/{id} {
+      allow read, create: if ativo();
+      allow update, delete: if master();
+    }
+
+    match /solicitacoes/{id} {
+      allow read, create, update: if ativo();
+      allow delete: if master() || (ativo() && resource.data.solicitanteUid == request.auth.uid && resource.data.status == "Pendente");
+    }
+
+    match /exames/{id} {
+      allow read, create, update: if ativo();
+      allow delete: if master();
+    }
+
+    match /inventario/{id} {
+      allow read, create, update: if ativo();
+      allow delete: if master();
+    }
+
+    match /notas/{id} {
+      allow read, create: if ativo();
+      allow update, delete: if master();
+    }
+
+    match /profissionais/{id} {
+      allow read: if ativo();
+      allow write: if master();
+    }
+
+    match /catalogoExames/{id} {
+      allow read: if ativo();
+      allow write: if master();
+    }
+
+    match /pendencias/{id} {
+      allow read, create: if ativo();
+      allow update: if estoquista();
+      allow delete: if master();
+    }
+
+    match /contagens/{id} {
+      allow read, create: if ativo();
+      allow update, delete: if master();
+    }
+
+    match /modelosLaudo/{id} {
+      allow read: if ativo();
+      allow write: if master();
+    }
+
+    // Laudos liberados não podem ser alterados (só o master corrige)
+    match /laudos/{id} {
+      allow read, create: if ativo();
+      allow update, delete: if master();
+    }
+
+    match /servicos/{id} {
+      allow read: if ativo();
+      allow write: if master();
+    }
+
+    match /pacotes/{id} {
+      allow read: if ativo();
+      allow write: if master();
+    }
+
+    match /orcamentos/{id} {
+      allow read, create: if ativo();
+      allow update, delete: if master();
+    }
+
+    // ===== Vacinas / portal do tutor =====
+    // O tutor (login por CPF) só lê os próprios dados. Ele não tem documento em /users, então ativo() é falso para ele.
+    match /tutores/{cpf} {
+      allow read: if ativo() || (logado() && resource.data.uid == request.auth.uid);
+      allow write: if ativo();
+    }
+    match /pets/{id} {
+      allow read: if ativo() || (logado() && resource.data.tutorUid == request.auth.uid);
+      allow write: if ativo();
+    }
+    match /vacinacoes/{id} {
+      allow read: if ativo() || (logado() && resource.data.tutorUid == request.auth.uid);
+      allow create, update: if ativo();
+      allow delete: if master();
+    }
+    // Só a versão do login, indexada pelo hash do CPF: dá para consultar um, nunca listar
+    match /acessos/{hash} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if ativo();
+    }
+    match /avisosVacina/{id} {
+      allow read, create: if ativo();
+    }
+    match /config/{id} {
+      allow read, write: if ativo();
+    }
+    match /conferenciasInventario/{id} {
+      allow read, create: if ativo();
+    }
+    match /equivalencias/{id} {
+      allow read: if ativo();
+      allow write: if estoquista();
+    }
+    match /listaCompras/{id} {
+      allow read, write: if ativo();
+    }
+    match /programados/{id} {
+      allow read, write: if ativo();
+    }
+
+    match /cotacoes/{id} {
+      allow read, create, update: if ativo();
+      allow delete: if master();
+    }
+
+    match /fornecedores/{id} {
+      allow read: if ativo();
+      allow write: if master();
+    }
+  }
+}
