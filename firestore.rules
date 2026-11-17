@@ -3,7 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ⚠️ Troque pelo SEU e-mail (o mesmo do firebase-config.js)
-    function masterEmail() { return "seu-email@exemplo.com"; }
+    function masterEmail() { return "vetplusespecialidades@gmail.com"; }
 
     function logado() { return request.auth != null; }
     function perfil() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }

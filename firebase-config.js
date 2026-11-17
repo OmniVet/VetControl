@@ -11,7 +11,7 @@ export const firebaseConfig = {
 
 // E-mail do usuário MASTER (você). O primeiro login com este e-mail vira master.
 // Use o MESMO e-mail no arquivo firestore.rules.
-export const MASTER_EMAIL = "seu-email@exemplo.com";
+export const MASTER_EMAIL = "vetplusespecialidades@gmail.com";
 
 // Listas editáveis
 // Categorias = abas da planilha da clínica
