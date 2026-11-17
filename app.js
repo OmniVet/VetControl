@@ -2,8 +2,8 @@ import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, orderBy, runTransaction, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { cartaoHtml, CARTAO_CSS, rotulo } from "./cartao.js";
-import { lerPlanilhaClinica } from "./importar-planilha.js";
-import { firebaseConfig, MASTER_EMAIL, DISTRIBUIDORAS, MEDIDAS, SALAS, DIAS_ALERTA_VALIDADE, EXAMES, STATUS_EXAME, STATUS_REPOSICAO, INV_CATEGORIAS, INV_LOCAIS, INV_ESTADO, LABORATORIOS, CONVENIOS, ORIGENS, CLINICA, DIAS_SEM_USO, VACINAS, VACINAS_COMERCIAIS, DIAS_A_VENCER, DOMINIO_TUTOR, TIPOS_AMBULATORIO, TABELAS_PRECO, CATEGORIAS_SERVICO, VALIDADE_ORCAMENTO_DIAS, CATALOGO_INICIAL, GEMINI_API_KEY, GEMINI_MODEL } from "./firebase-config.js";
+import { lerPlanilhaClinica, COLUNAS_MODELO, COLUNAS_SALAS, NOME_ABA } from "./importar-planilha.js";
+import { firebaseConfig, MASTER_EMAIL, DISTRIBUIDORAS, MEDIDAS, SALAS, DIAS_ALERTA_VALIDADE, EXAMES, STATUS_EXAME, STATUS_REPOSICAO, INV_CATEGORIAS, INV_LOCAIS, INV_ESTADO, LABORATORIOS, CONVENIOS, ORIGENS, CLINICA, DIAS_SEM_USO, VACINAS, VACINAS_COMERCIAIS, DIAS_A_VENCER, DOMINIO_TUTOR, TIPOS_AMBULATORIO, TABELAS_PRECO, CATEGORIAS_SERVICO, VALIDADE_ORCAMENTO_DIAS, CATALOGO_INICIAL, GEMINI_API_KEY, GEMINI_MODEL, DIAS_ANALISE, DIAS_COBERTURA_MINIMO, DIAS_COBERTURA_IDEAL, GOOGLE_CSE_KEY, GOOGLE_CSE_CX } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -167,7 +167,7 @@ const SETORES = [
   { id: "compras", n: "4", titulo: "Solicitação de compras", icone: "🛒", abas: [["solicitacoes", "Pedir algo ao estoquista"]] },
   { id: "relatorios", n: "5", titulo: "Relatórios gerais", icone: "📈", abas: [["relatorios", "Gerador de relatórios"]] },
   { id: "estoque", n: "9", titulo: "Estoque", icone: "📦", abas: [["produtos", "9.1 Estoque geral"], ["limbo", "9.2 Limbo"], ["pedido", "9.3 Detalhes de pedido"], ["pendencias", "Pendências"], ["nfe", "Receber nota (XML)"], ["alertas", "Alertas"], ["equivalentes", "Medicamentos equivalentes"], ["cotacao", "Cotação"]] },
-  { id: "reposicao", n: "", titulo: "Reposição por setor", icone: "🏥", abas: [["salas", "Salas, geladeiras e setores"]] },
+  { id: "reposicao", n: "", titulo: "Reposição por setor", icone: "🏥", abas: [["salas", "Salas, geladeiras e setores"], ["ficha", "Ficha de reposição"], ["semanal", "Relatório semanal de reposição"]] },
   { id: "inventario", n: "", titulo: "Inventário (patrimônio)", icone: "🪑", abas: [["inventario", "Equipamentos e móveis"]] },
   { id: "config", n: "", titulo: "Configurações", icone: "⚙️", master: true, abas: [["usuarios", "Usuários"], ["fornecedores", "Fornecedores"], ["profissionais", "Profissionais"], ["catalogo", "Catálogo de exames"]] },
   // Módulos que vão virar um sistema próprio (continuam funcionando aqui enquanto isso)
@@ -184,23 +184,24 @@ async function render() {
   atualizarBadge();
   const v = $("#view"); v.innerHTML = `<p class="muted">Carregando…</p>`;
   const telas = { "nova-solicitacao": telaNovaSolicitacao, "laudos-pendentes": telaLaudosPendentes, "laudos-liberados": telaLaudosLiberados, producao: telaProducao, "exportar-exames": (v) => telaRelatorios(v, "exames"),
-    equivalentes: telaEquivalentes, vencimentos: telaVencimentos, vacinas: telaVacinas, pets: telaPets, ambulatorio: telaAmbulatorio, orcamento: telaOrcamento, orcamentos: telaOrcamentos, servicos: telaServicos, pacotes: telaPacotes, prestadores: (v) => telaPlanilha(v, "prest"), comparativo: telaComparativo, modelos: telaModelos, limbo: telaLimbo, pendencias: telaPendencias, planilha: telaPlanilha, catalogo: telaCatalogo, painel: telaPainel, alertas: telaAlertas, profissionais: telaProfissionais, cotacao: telaCotacao, inventario: telaInventario, nfe: telaNfe, solicitacoes: telaSolicitacoes, exames: telaExames, produtos: telaProdutos, salas: telaSalas, pedido: telaPedido, relatorios: telaRelatorios, fornecedores: telaFornecedores, usuarios: telaUsuarios };
+    equivalentes: telaEquivalentes, vencimentos: telaVencimentos, vacinas: telaVacinas, pets: telaPets, ambulatorio: telaAmbulatorio, orcamento: telaOrcamento, orcamentos: telaOrcamentos, servicos: telaServicos, pacotes: telaPacotes, prestadores: (v) => telaPlanilha(v, "prest"), comparativo: telaComparativo, modelos: telaModelos, limbo: telaLimbo, pendencias: telaPendencias, planilha: telaPlanilha, catalogo: telaCatalogo, painel: telaPainel, alertas: telaAlertas, profissionais: telaProfissionais, cotacao: telaCotacao, inventario: telaInventario, nfe: telaNfe, solicitacoes: telaSolicitacoes, exames: telaExames, produtos: telaProdutos, salas: telaSalas, ficha: telaFicha, semanal: telaSemanal, pedido: telaPedido, relatorios: telaRelatorios, fornecedores: telaFornecedores, usuarios: telaUsuarios };
   try { await (telas[rota] || telaPainel)(v); } catch (e) { v.innerHTML = `<p class="erro">Erro: ${esc(e.message)}</p>`; console.error(e); }
   window.scrollTo(0, 0);
 }
 
 /* ================= ESTOQUE / PRODUTOS ================= */
 async function telaProdutos(v) {
-  await Promise.all([carregarProdutos(), carregarPedidoAberto(), carregarEquivalencias()]);
+  await Promise.all([carregarProdutos(), carregarPedidoAberto(), carregarEquivalencias()]); await carregarSugestoes().catch((e) => console.warn("Sugestões indisponíveis:", e));
   v.innerHTML = `
   <div class="barra"><h2>Estoque central</h2>
     <input id="busca" placeholder="Buscar nome, princípio ativo, código…" />
     <select id="fCat"><option value="">Todas as distribuidoras</option>${opts(DISTRIBUIDORAS)}</select>
     ${podeConfirmar() ? `<button class="btn" id="btnVencidos">Mover vencidos ao limbo</button>` : ""}
-    ${isMaster() ? `<button class="btn" id="btnPlan">📥 Importar planilha da clínica</button><button class="btn" id="btnImport">Colar lista</button>` : ""}
+    ${podeConfirmar() ? `<button class="btn" id="btnPlan">📥 Importar planilha</button>` : ""}${isMaster() ? `<button class="btn" id="btnImport">Colar lista</button>` : ""}
+    ${podeConfirmar() ? `<button class="btn" id="btnFotos">🖼 Buscar fotos</button><button class="btn" id="btnSug" title="Aplica o mínimo e o ideal sugeridos nos produtos com histórico suficiente">📊 Aplicar sugestões</button>` : ""}
     <button class="btn primary" id="btnNovo">+ Novo produto</button></div>
   <p class="muted small">Contagem do <b>estoque central</b> apenas. As salas/setores e o limbo têm contagens próprias nas outras abas.${podeConfirmar() ? "" : " Suas entradas e retiradas ficam <b>pendentes</b> até a estoquista confirmar."}</p>
-  <div class="tabela-wrap"><table><thead><tr><th></th><th>Produto</th><th>Distribuidora</th><th>Medida</th><th>Tipo</th><th>No estoque / validade</th><th>Ideal</th><th>Mín.</th><th>Status</th><th>Ações</th></tr></thead><tbody id="tb"></tbody></table></div>`;
+  <div class="tabela-wrap"><table><thead><tr><th></th><th>Produto</th><th>Distribuidora</th><th>Medida</th><th>Tipo</th><th>No estoque / validade</th><th>Ideal</th><th>Mín.</th><th>Sugestão (últimos ${DIAS_ANALISE} dias)</th><th>Status</th><th>Ações</th></tr></thead><tbody id="tb"></tbody></table></div>`;
   const desenhar = () => {
     const b = $("#busca").value.toLowerCase(), c = $("#fCat").value;
     $("#tb").innerHTML = produtos.filter((p) => (!b || `${p.nome} ${p.marca || ""} ${p.principio || ""} ${p.codigo || ""} ${p.subcategoria || ""}`.toLowerCase().includes(b)) && (!c || p.categoria === c)).map((p) => `
@@ -209,7 +210,7 @@ async function telaProdutos(v) {
       <td>${esc(p.categoria)}</td><td>${esc(p.medida)}</td>
       <td>${p.tipo === "consumo" ? `<span class="tag neutro">Setor (consumo)</span>` : `<span class="tag neutro">Estoque</span>`}</td>
       <td><b>${total(p.lotesEstoque)}</b>${lotesHtml(p.lotesEstoque)}</td>
-      <td>${p.ideal ?? ""}</td><td>${p.minimo ?? ""}</td><td>${p.naoComprar ? `<span class="tag neutro">Não repor</span>` : statusEstoque(p)}</td>
+      <td>${p.ideal ?? ""}</td><td>${p.minimo ?? ""}</td><td class="sug">${sugestaoHtml(p)}</td><td>${p.naoComprar ? `<span class="tag neutro">Não repor</span>` : statusEstoque(p)}</td>
       <td class="acoes-linha">
         <button class="btn small" data-a="entrada" data-id="${p.id}">+ Entrada</button>
         <button class="btn small" data-a="baixa" data-id="${p.id}">Retirar p/ setor</button>
@@ -217,18 +218,20 @@ async function telaProdutos(v) {
         ${p.naoComprar ? "" : `<button class="btn small" data-a="pedir" data-id="${p.id}">🛒 Incluir no pedido${pedidoAberto[p.id] ? ` <b>(${pedidoAberto[p.id]})</b>` : ""}</button>`}
         ${podeConfirmar() ? `<button class="btn small" data-a="editar" data-id="${p.id}">Editar</button>` : ""}
         ${isMaster() ? `<button class="btn small danger" data-a="excluir" data-id="${p.id}">Excluir</button>` : ""}
-      </td></tr>`).join("") || `<tr><td colspan="10" class="muted">Nenhum produto.</td></tr>`;
+      </td></tr>`).join("") || `<tr><td colspan="11" class="muted">Nenhum produto.</td></tr>`;
   };
   desenhar(); $("#busca").oninput = desenhar; $("#fCat").onchange = desenhar;
   $("#btnNovo").onclick = () => modalProduto();
   $("#btnVencidos") && ($("#btnVencidos").onclick = moverVencidosLimbo);
   $("#btnImport") && ($("#btnImport").onclick = modalImportarProdutos);
   $("#btnPlan") && ($("#btnPlan").onclick = modalImportarPlanilhaClinica);
+  $("#btnFotos") && ($("#btnFotos").onclick = modalBuscarFotos);
+  $("#btnSug") && ($("#btnSug").onclick = aplicarSugestoesEmLote);
   $("#tb").onclick = (e) => {
     const eq = e.target.closest("[data-eq]"); if (eq) return verGrupoEquiv(eq.dataset.eq);
     const b = e.target.closest("button"); if (!b) return; const p = produtos.find((x) => x.id === b.dataset.id);
     ({ entrada: modalEntrada, baixa: modalBaixa, limbo: modalLimbo, editar: modalProduto, excluir: excluirProduto,
-       pedir: modalIncluirPedido })[b.dataset.a](p);
+       pedir: modalIncluirPedido, aplicarSug: aplicarSugestao })[b.dataset.a](p);
   };
 }
 
@@ -237,6 +240,7 @@ function modalProduto(p = {}) {
     <div class="duas"><label>Foto (arquivo ou câmera)<input type="file" name="foto" accept="image/*" capture="environment"></label>
     <label>…ou link da imagem <a href="#" id="buscaFoto" class="small">🔎 Buscar foto no Google</a><input name="fotoUrl" id="fotoUrl" value="${esc(p.fotoUrl)}" placeholder="Cole aqui o endereço da imagem"></label></div>
     <img id="fotoPrev" class="foto ${fotoSrc(p) ? "" : "hidden"}" src="${esc(fotoSrc(p))}" style="width:80px;height:80px">
+    ${p.fotoAuto ? `<p class="small muted">📷 Foto sugerida automaticamente: confira se é o produto certo (marca e apresentação).</p>` : ""}
     <label>Nome do produto<input name="nome" required value="${esc(p.nome)}" placeholder="Ex.: Cateter Nº 22 (Azul)"></label>
     <div class="duas">
       <label>Categoria (distribuidora)<select name="categoria">${opts(DISTRIBUIDORAS, p.categoria)}</select></label>
@@ -259,6 +263,7 @@ function modalProduto(p = {}) {
     const dados = { nome: f.nome.trim(), categoria: f.categoria, medida: f.medida, marca: f.marca.trim(), tipo: f.tipo, ideal: Number(f.ideal), minimo: Number(f.minimo),
       fotoUrl: f.fotoUrl.trim(), controlado: !!f.controlado, naoComprar: !!f.naoComprar, naoComprarMotivo: f.naoComprar ? f.naoComprarMotivo.trim() : "", atualizadoEm: serverTimestamp() };
     const arq = form.foto.files[0]; if (arq) dados.foto = await comprimirFoto(arq); else if (dados.fotoUrl) dados.foto = "";
+    if (arq || dados.fotoUrl !== (p.fotoUrl || "")) dados.fotoAuto = false;
     if (p.id) { await updateDoc(doc(db, "produtos", p.id), dados); toast("Produto atualizado."); return; }
     const q = Number(f.qtdInicial || 0);
     if (q > 0 && !f.valInicial) throw new Error("Informe a validade da quantidade inicial.");
@@ -467,6 +472,180 @@ function regrasContagemHtml(sala) {
 function ordemGeladeira(lotes = []) {
   const l = [...lotes].filter((x) => x.qtd > 0).sort((a, b) => a.validade.localeCompare(b.validade)); if (l.length < 2) return "";
   return `<div class="ordem-gel">${l.map((x, i) => `<div>${i === 0 ? "⬆ em cima" : i === l.length - 1 ? "⬇ embaixo" : "↕ meio"}: <b>${x.qtd}</b> · val. ${fmtData(x.validade)}</div>`).join("")}</div>`;
+}
+
+/* ================= SUGESTÃO DE ESTOQUE MÍNIMO / IDEAL (últimos 90 dias) ================= */
+// Conta simples e conferível, sem IA: consumo médio por dia × dias de cobertura (ajuste em firebase-config.js).
+// "Saída" do estoque central = reposição para uma sala (produto de estoque) ou consumo (produto de setor).
+let sugestoes = {}, sugestoesEm = 0;
+async function carregarSugestoes(forcar = false) {
+  if (!forcar && Date.now() - sugestoesEm < 10 * 60 * 1000) return sugestoes;
+  const ini = Timestamp.fromDate(new Date(Date.now() - DIAS_ANALISE * 864e5));
+  const movs = (await getDocs(query(collection(db, "movimentos"), where("data", ">=", ini)))).docs.map((d) => d.data());
+  const porProd = {}; movs.forEach((m) => { if (m.produtoId) (porProd[m.produtoId] ??= []).push(m); });
+  sugestoes = {};
+  for (const p of produtos) {
+    const saidas = (porProd[p.id] || []).filter((m) => m.tipo === "reposicao" || (m.tipo === "consumo" && p.tipo === "consumo"));
+    const qtd = saidas.reduce((t, m) => t + Number(m.qtd || 0), 0); if (!qtd) continue;
+    const vida = p.criadoEm?.toDate ? Math.ceil((Date.now() - p.criadoEm.toDate()) / 864e5) : DIAS_ANALISE;
+    const janela = Math.min(DIAS_ANALISE, Math.max(30, vida)), diario = qtd / janela, min = Math.max(1, Math.ceil(diario * DIAS_COBERTURA_MINIMO));
+    sugestoes[p.id] = { qtd, janela, diario, min, ideal: Math.max(min + 1, Math.ceil(diario * DIAS_COBERTURA_IDEAL)), confiavel: janela >= 60 && saidas.length >= 4 };
+  }
+  sugestoesEm = Date.now(); return sugestoes;
+}
+function sugestaoHtml(p) {
+  const g = sugestoes[p.id]; if (!g) return `<span class="muted small">sem saídas registradas</span>`;
+  const dif = !p.minimo || Math.abs(g.min - p.minimo) / p.minimo > 0.3;
+  const seta = p.minimo && g.min > p.minimo * 1.3 ? ` <span class="tag alerta">↑ subir</span>` : p.minimo && g.min < p.minimo * 0.7 ? ` <span class="tag neutro">↓ reduzir</span>` : "";
+  return `<div>mín. <b>${g.min}</b> · ideal <b>${g.ideal}</b>${seta}</div><div class="muted small">saíram ${g.qtd} em ${g.janela} dias (${g.diario.toFixed(1).replace(".", ",")}/dia)${g.confiavel ? "" : " · poucos dados"}</div>${podeConfirmar() && dif ? `<button class="btn small" data-a="aplicarSug" data-id="${p.id}">Aplicar</button>` : ""}`;
+}
+async function aplicarSugestao(p) {
+  const g = sugestoes[p.id]; if (!g) return;
+  await updateDoc(doc(db, "produtos", p.id), { minimo: g.min, ideal: g.ideal, sugestaoAplicadaEm: serverTimestamp() });
+  sugestoesEm = 0; toast(`${p.nome}: mínimo ${g.min}, ideal ${g.ideal}.`); render();
+}
+async function aplicarSugestoesEmLote() {
+  const alvo = produtos.filter((p) => sugestoes[p.id]?.confiavel && !p.naoComprar && sugestoes[p.id].min !== Number(p.minimo || 0));
+  if (!alvo.length) return toast("Nenhum produto com histórico suficiente (60+ dias e 4+ saídas) para ajustar.");
+  if (!confirm(`Ajustar mínimo e ideal de ${alvo.length} produto(s) que têm histórico suficiente?`)) return;
+  for (const p of alvo) await updateDoc(doc(db, "produtos", p.id), { minimo: sugestoes[p.id].min, ideal: sugestoes[p.id].ideal, sugestaoAplicadaEm: serverTimestamp() });
+  sugestoesEm = 0; toast(`${alvo.length} produto(s) ajustados.`); render();
+}
+
+/* ================= FOTOS AUTOMÁTICAS DOS PRODUTOS (Google Programmable Search, imagens) ================= */
+function modalBuscarFotos() {
+  const sem = produtos.filter((p) => !fotoSrc(p) && !p.fotoTentada);
+  if (!GOOGLE_CSE_KEY || !GOOGLE_CSE_CX) return abrirModal("🖼 Buscar fotos automaticamente", `<p><b>${sem.length}</b> produto(s) sem foto. Para o sistema buscar sozinho falta ligar a busca de imagens do Google (grátis, 100 buscas por dia): preencha <code>GOOGLE_CSE_KEY</code> e <code>GOOGLE_CSE_CX</code> no <b>firebase-config.js</b> (passo a passo no README).</p>
+    <p class="small muted">Enquanto isso, dentro de cada produto existe o botão <b>🔎 Buscar foto no Google</b>.</p>`, async () => {}, "Entendi");
+  abrirModal("🖼 Buscar fotos automaticamente", `<p><b>${sem.length}</b> produto(s) ainda sem foto. O Google libera cerca de 100 buscas grátis por dia: se tiver mais, repita amanhã.</p>
+    <label>Quantos buscar agora<input type="number" name="n" min="1" max="100" value="${Math.min(90, sem.length) || 1}"></label>
+    <p id="fotoProg" class="small"></p><p class="small muted">A busca pode errar marca ou apresentação: as fotos automáticas ficam marcadas em "Editar produto" para você conferir.</p>`,
+  async (f) => { if (!sem.length) throw new Error("Todos os produtos já têm foto."); await buscarFotosAuto(sem.slice(0, Math.max(1, Number(f.n)))); }, "Buscar");
+}
+async function buscarFotosAuto(lista) {
+  let ok = 0, vazio = 0;
+  for (const [i, p] of lista.entries()) {
+    $("#fotoProg") && ($("#fotoProg").textContent = `Buscando ${i + 1} de ${lista.length}: ${p.nome}`);
+    const q = [p.nome, p.marca].filter(Boolean).join(" ");
+    const r = await fetch(`https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(GOOGLE_CSE_KEY)}&cx=${encodeURIComponent(GOOGLE_CSE_CX)}&searchType=image&num=1&safe=active&imgSize=medium&q=${encodeURIComponent(q)}`);
+    const j = await r.json();
+    if (r.status === 429) throw new Error(`Limite diário do Google atingido. ${ok} foto(s) já salvas; continue amanhã.`);
+    if (!r.ok) throw new Error(j.error?.message || `Erro ${r.status}`);
+    const it = j.items?.[0], url = it?.image?.thumbnailLink || it?.link || "";
+    await updateDoc(doc(db, "produtos", p.id), { fotoUrl: url, fotoAuto: !!url, fotoTentada: true });
+    url ? ok++ : vazio++;
+  }
+  toast(`${ok} foto(s) encontrada(s)${vazio ? `, ${vazio} sem resultado` : ""}. Confira: a busca automática pode errar a marca.`);
+}
+
+/* ================= MODELO DE PLANILHA DO VETCONTROL ================= */
+async function baixarModeloPlanilha() {
+  await carregarXLSX();
+  const wb = XLSX.utils.book_new();
+  const leia = [["MODELO DE ESTOQUE DO VETCONTROL"], [""],
+    ["• Uma aba por categoria. NÃO mude o nome das abas: o nome da aba define a categoria (distribuidora) do produto."],
+    ["• Só \"Nome comercial\" é obrigatório. O código é opcional, mas evita duplicar o produto numa nova importação."],
+    ["• A linha de exemplo (Observações = EXEMPLO) é ignorada: pode apagar."],
+    ["• Validade no formato DD/MM/AAAA. Mesmo produto com validade diferente = uma linha para cada."],
+    ["• Estoque mínimo: quando a quantidade chega nele, aparece REPOR. Estoque ideal é opcional (vazio = o dobro do mínimo)."],
+    [`• Depois de alguns dias de uso, o VetControl sugere o mínimo e o ideal certos pelas saídas dos últimos ${DIAS_ANALISE} dias.`],
+    ["• Aba \"Salas\": o que cada setor deve ter. A coluna Sala deve ser igual a uma destas:"], ...SALAS.map((x) => ["      - " + x.nome])];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(leia), "LEIA-ME");
+  const exemplo = ["EX001", "Insumo", "Cateter", "Cateter intravenoso 22G azul", "", "", "BD", "Unidade", "22G", "", "un", 10, 5, 10, "", "", "Armário 1", "EXEMPLO – apague esta linha"];
+  for (const cat of DISTRIBUIDORAS) {
+    const ws = XLSX.utils.aoa_to_sheet([COLUNAS_MODELO, exemplo]); ws["!cols"] = COLUNAS_MODELO.map((c) => ({ wch: Math.max(14, c.length + 2) })); ws["!cols"][3] = { wch: 40 };
+    XLSX.utils.book_append_sheet(wb, ws, NOME_ABA[cat] || cat);
+  }
+  const wsS = XLSX.utils.aoa_to_sheet([COLUNAS_SALAS, [SALAS[0].nome, "EX001", "Cateter intravenoso 22G azul", 10, 3, "EXEMPLO – apague esta linha"]]); wsS["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 40 }, { wch: 14 }, { wch: 24 }, { wch: 28 }];
+  XLSX.utils.book_append_sheet(wb, wsS, "Salas");
+  XLSX.writeFile(wb, "Modelo_Estoque_VetControl.xlsx");
+}
+
+/* ================= FICHA DE REPOSIÇÃO DA SALA ================= */
+// Lista o que a sala deve ter (ideal) e, ao lado, a coluna para lançar quanto foi reposto. Cada lançamento vira uma
+// reposição (sai do estoque central e entra na sala), e é isso que alimenta o relatório semanal.
+async function telaFicha(v) {
+  await carregarProdutos();
+  const s = await getDocs(collection(db, "salas", salaAtual, "itens"));
+  const itens = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((it) => Number(it.ideal) > 0).sort((a, b) => a.nome.localeCompare(b.nome));
+  itens.forEach((it) => { it.prod = produtos.find((x) => x.id === it.id); it.controlado = !!(it.prod?.controlado ?? it.controlado);
+    it.agora = total(it.lotes); it.falta = Math.max(0, Number(it.ideal) - it.agora); it.central = it.prod ? total(it.prod.lotesEstoque) : 0; });
+  v.innerHTML = `
+  <div class="barra no-print"><h2>Ficha de reposição</h2><button class="btn" onclick="print()">🖨 Imprimir ficha</button></div>
+  <div class="tabs no-print">${SALAS.map((x) => `<button class="btn ${x.id === salaAtual ? "ativo" : ""}" data-s="${x.id}">${x.nome}</button>`).join("")}</div>
+  <div class="ficha-cab"><h2>${esc(CLINICA.nome)} · Ficha de reposição — ${esc(nomeSala(salaAtual))}</h2><p>Data: ____/____/________ &nbsp;&nbsp; Responsável: ______________________________</p></div>
+  <p class="muted small no-print">Quantidade <b>ideal</b> de cada item nesta sala. Digite na última coluna quanto você repôs e clique em <b>Registrar reposição</b>: sai do estoque central, entra na sala e aparece no relatório semanal. 🔒 Controlados não são lançados aqui (exigem o livro): use Estoque → Retirar p/ setor.${podeConfirmar() ? "" : " Seus lançamentos ficam <b>pendentes</b> até a estoquista confirmar."}</p>
+  <div class="tabela-wrap"><table class="ficha"><thead><tr><th></th><th>Item</th><th>Ideal</th><th>Na sala agora</th><th>Falta</th><th>No estoque central</th><th>Qtd. reposta</th></tr></thead><tbody>
+  ${itens.map((it) => `<tr><td>${fotoTag(it.prod || {}).replace('class="foto"', 'class="foto foto-g"')}</td><td><b>${esc(it.nome)}</b>${it.controlado ? ` <span class="tag critico">🔒 Controlado</span>` : ""}<div class="muted small">${esc(it.medida || "")}</div></td>
+    <td>${it.ideal}</td><td>${it.agora}</td><td>${it.falta ? `<b>${it.falta}</b>` : "—"}</td><td>${it.prod ? it.central : "—"}</td>
+    <td><input type="number" min="0" data-id="${it.id}" data-falta="${it.falta}" data-central="${it.central}" ${it.controlado || !it.prod ? "disabled" : ""}></td></tr>`).join("") || `<tr><td colspan="7" class="muted">Nenhum item com quantidade ideal neste setor. Configure em "Salas, geladeiras e setores" (botão Ideal/crítico) ou importe a aba Salas da planilha.</td></tr>`}
+  </tbody></table></div>
+  ${itens.length ? `<div class="barra no-print" style="margin-top:12px"><label>Quem fez a reposição<input id="fResp" value="${esc(usuario.nome)}"></label>
+    <button class="btn" id="fPreencher">Preencher com o que falta</button><button class="btn primary" id="fSalvar">✅ Registrar reposição</button></div><p id="fRes" class="small"></p>` : ""}`;
+  v.querySelectorAll("[data-s]").forEach((b) => (b.onclick = () => { salaAtual = b.dataset.s; render(); }));
+  if (!itens.length) return;
+  $("#fPreencher").onclick = () => v.querySelectorAll("input[data-id]:not(:disabled)").forEach((i) => { const n = Math.min(Number(i.dataset.falta), Number(i.dataset.central)); i.value = n > 0 ? n : ""; });
+  $("#fSalvar").onclick = async () => {
+    const resp = $("#fResp").value.trim(); if (!resp) return toast("Informe quem fez a reposição.");
+    const linhas = [...v.querySelectorAll("input[data-id]:not(:disabled)")].filter((i) => Number(i.value) > 0);
+    if (!linhas.length) return toast("Digite a quantidade reposta em pelo menos um item.");
+    $("#fSalvar").disabled = true; let ok = 0, pend = 0; const falhas = [];
+    for (const i of linhas) {
+      const it = itens.find((x) => x.id === i.dataset.id), qtd = Number(i.value);
+      try {
+        if (!podeConfirmar()) { await criarPendencia({ tipo: "saida", produtoId: it.prod.id, produtoNome: it.prod.nome, qtd, sala: salaAtual, responsavel: resp, obs: "Ficha de reposição" }); pend++; }
+        else { await darBaixa(it.prod, salaAtual, qtd, resp, "Ficha de reposição"); ok++; }
+      } catch (e) { falhas.push(`${it.nome}: ${e.message}`); }
+    }
+    toast(`${ok ? ok + " item(ns) repostos. " : ""}${pend ? pend + " enviado(s) para confirmação. " : ""}${falhas.length ? falhas.length + " com problema." : ""}`.trim());
+    if (falhas.length) alert("Não foi possível lançar:\n\n" + falhas.join("\n"));
+    render();
+  };
+}
+
+/* ================= RELATÓRIO SEMANAL DE REPOSIÇÃO (o que mais sai por semana) ================= */
+let semRef = null, semSala = "";
+async function telaSemanal(v) {
+  semRef ||= hoje();
+  v.innerHTML = `<div class="card no-print" style="margin-bottom:14px"><h2 style="margin-top:0">Relatório semanal de reposição</h2>
+    <p class="muted small">Soma tudo que foi reposto nos setores (pela Ficha de reposição ou pela retirada do estoque) na semana de segunda a domingo, comparada às 3 semanas anteriores.</p>
+    <div class="duas"><label>Semana que contém o dia<input type="date" id="sRef" value="${semRef}"></label>
+    <label>Setor<select id="sSala"><option value="">Todos os setores</option>${opts(SALAS, semSala)}</select></label></div>
+    <div class="barra"><button class="btn primary" id="sGerar">Gerar</button><button class="btn" id="sCsv">Exportar CSV (Excel)</button><button class="btn" onclick="print()">Imprimir / PDF</button></div></div><div id="sRes"></div>`;
+  let linhas = [], rotulos = [];
+  const dm = (d) => d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  const gerar = async () => {
+    semRef = $("#sRef").value || hoje(); semSala = $("#sSala").value;
+    const ref = new Date(semRef + "T12:00:00"), seg = new Date(ref); seg.setDate(ref.getDate() - ((ref.getDay() + 6) % 7)); seg.setHours(0, 0, 0, 0);
+    const base = new Date(seg); base.setDate(seg.getDate() - 21); const fim = new Date(seg); fim.setDate(seg.getDate() + 7);
+    const snap = await getDocs(query(collection(db, "movimentos"), where("data", ">=", Timestamp.fromDate(base)), where("data", "<", Timestamp.fromDate(fim))));
+    const movs = snap.docs.map((d) => d.data()).filter((m) => m.tipo === "reposicao" && m.data?.toDate && (!semSala || m.local === semSala));
+    const ini = [0, 1, 2, 3].map((i) => { const a = new Date(base); a.setDate(base.getDate() + 7 * i); return a; });
+    const domingo = new Date(seg); domingo.setDate(seg.getDate() + 6);
+    rotulos = [`${dm(ini[0])}`, `${dm(ini[1])}`, `${dm(ini[2])}`, `${dm(seg)}–${dm(domingo)}`];
+    const mp = {}, pessoas = {}, setores = {};
+    movs.forEach((m) => { const i = Math.floor((m.data.toDate() - base) / (7 * 864e5)); if (i < 0 || i > 3) return; const q = Number(m.qtd || 0);
+      const x = (mp[m.produtoId || m.produtoNome] ??= { nome: m.produtoNome, sem: [0, 0, 0, 0], salas: new Set() }); x.sem[i] += q; x.salas.add(nomeSala(m.local));
+      if (i === 3) { const pe = m.responsavel || m.usuarioNome || "—"; pessoas[pe] = (pessoas[pe] || 0) + q; setores[nomeSala(m.local)] = (setores[nomeSala(m.local)] || 0) + q; } });
+    linhas = Object.values(mp).map((x) => ({ ...x, media: (x.sem[0] + x.sem[1] + x.sem[2]) / 3 })).sort((a, b) => b.sem[3] - a.sem[3] || b.media - a.media);
+    const totalSem = linhas.reduce((t, x) => t + x.sem[3], 0), top = linhas[0]?.sem[3] ? linhas[0] : null;
+    const tend = (x) => (!x.media && x.sem[3] ? "novo" : x.media && x.sem[3] > x.media * 1.3 ? "↑ subiu" : x.media && x.sem[3] < x.media * 0.7 ? "↓ caiu" : "=");
+    const mini = (obj, tit) => `<div class="card"><b>${tit}</b><table><tbody>${Object.entries(obj).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<tr><td>${esc(k)}</td><td><b>${n}</b></td></tr>`).join("") || `<tr><td class="muted">—</td></tr>`}</tbody></table></div>`;
+    $("#sRes").innerHTML = `<h2>Reposição da semana ${esc(rotulos[3])}${semSala ? " · " + esc(nomeSala(semSala)) : ""}</h2>
+      <p class="muted small">Gerado em ${new Date().toLocaleString("pt-BR")} por ${esc(usuario.nome)}</p>
+      <div class="grid"><div class="card kpi"><span class="muted">Unidades repostas</span><b>${totalSem}</b></div><div class="card kpi"><span class="muted">Itens diferentes</span><b>${linhas.filter((x) => x.sem[3]).length}</b></div>
+      <div class="card kpi"><span class="muted">Mais saiu</span><b style="font-size:1rem">${top ? esc(top.nome) : "—"}</b>${top ? `<span class="small">${top.sem[3]} un.</span>` : ""}</div></div>
+      <div class="grid" style="margin:12px 0">${mini(setores, "Por setor (semana)")}${mini(pessoas, "Por pessoa (semana)")}</div>
+      <div class="tabela-wrap"><table><thead><tr><th>Item</th><th>Setor(es)</th><th>Sem. ${esc(rotulos[0])}</th><th>Sem. ${esc(rotulos[1])}</th><th>Sem. ${esc(rotulos[2])}</th><th>Semana ${esc(rotulos[3])}</th><th>Média 3 sem.</th><th></th></tr></thead><tbody>
+      ${linhas.map((x) => `<tr><td><b>${esc(x.nome)}</b></td><td class="small">${esc([...x.salas].join(", "))}</td><td>${x.sem[0]}</td><td>${x.sem[1]}</td><td>${x.sem[2]}</td><td><b>${x.sem[3]}</b></td><td>${x.media.toFixed(1).replace(".", ",")}</td><td>${tend(x)}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">Nenhuma reposição registrada neste período.</td></tr>`}</tbody></table></div>`;
+  };
+  $("#sGerar").onclick = () => gerar().catch((e) => ($("#sRes").innerHTML = `<p class="erro">${esc(e.message)}</p>`));
+  $("#sCsv").onclick = () => {
+    if (!linhas.length) return toast("Gere o relatório primeiro.");
+    const csv = [["Item", "Setores", ...rotulos.map((r, i) => (i < 3 ? "Sem. " : "Semana ") + r), "Média 3 sem."].join(";"), ...linhas.map((x) => [x.nome, [...x.salas].join(", "), ...x.sem, x.media.toFixed(1).replace(".", ",")].map((c) => String(c).replace(/;/g, ",")).join(";"))].join("\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv" })); a.download = `reposicao_semanal_${semRef}.csv`; a.click();
+  };
+  $("#sGerar").onclick();
 }
 
 /* ================= PEDIDO ACUMULADO ================= */
@@ -2243,9 +2422,11 @@ function modalProgramar(pets) {
 
 /* ================= IMPORTAR A PLANILHA DA CLÍNICA (xlsx com uma aba por categoria) ================= */
 function modalImportarPlanilhaClinica() {
-  abrirModal("📥 Importar planilha da clínica", `<p class="small">Envie a planilha <b>Controle_Estoque_e_Patrimonio.xlsx</b> (uma aba por categoria). Produtos que já existem (mesmo código ou mesmo nome) são <b>ignorados</b>, então dá para importar de novo quando a planilha crescer.</p>
+  abrirModal("📥 Importar planilha", `<p class="small">Envie a planilha no <b>modelo do VetControl</b> (ou o <b>Controle_Estoque_e_Patrimonio.xlsx</b>): uma aba por categoria${DISTRIBUIDORAS.length ? ` (${DISTRIBUIDORAS.map(esc).join(", ")})` : ""} e, se quiser, uma aba <b>Salas</b> com o que cada setor deve ter. Produtos que já existem (mesmo código ou mesmo nome) são <b>ignorados</b>, então dá para importar de novo quando a planilha crescer.</p>
+    <p><button type="button" class="btn" id="plModelo">⬇ Baixar modelo em branco (.xlsx)</button></p>
     <input type="file" id="plArq" accept=".xlsx,.xls"><div id="plPrev" style="margin-top:10px"></div>`, async () => { if (!window.__plan) throw new Error("Escolha a planilha primeiro."); await gravarPlanilha(window.__plan); }, "Importar");
   $("#modalOk").disabled = true;
+  $("#plModelo").onclick = baixarModeloPlanilha;
   $("#plArq").onchange = async (e) => {
     const arq = e.target.files[0]; if (!arq) return; $("#plPrev").innerHTML = "Lendo…";
     await carregarXLSX(); const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", cellDates: true });
@@ -2256,20 +2437,20 @@ function modalImportarPlanilhaClinica() {
     const porCat = {}; r.novos.forEach((p) => (porCat[p.categoria] = (porCat[p.categoria] || 0) + 1));
     $("#plPrev").innerHTML = `<div class="grid"><div class="card kpi"><span class="muted">Produtos novos</span><b>${r.novos.length}</b><span class="small">${r.produtos.length - r.novos.length} já existiam</span></div>
       <div class="card kpi"><span class="muted">Com saldo inicial</span><b>${r.novos.filter((p) => p.qtdInicial > 0).length}</b></div><div class="card kpi"><span class="muted">🔒 Controlados</span><b>${r.novos.filter((p) => p.controlado).length}</b></div>
-      <div class="card kpi"><span class="muted">Grupos de equivalentes</span><b>${r.grupos.length}</b></div></div>
+      <div class="card kpi"><span class="muted">Grupos de equivalentes</span><b>${r.grupos.length}</b></div>${r.salas.length ? `<div class="card kpi"><span class="muted">Itens de sala</span><b>${r.salas.length}</b></div>` : ""}</div>
       <p class="small">${Object.entries(porCat).map(([c, n]) => `${esc(c)}: <b>${n}</b>`).join(" · ")}${r.inventario.length ? ` · Inventário: <b>${r.inventario.length}</b>` : ""}${r.compras.length ? ` · Compras marketplace: <b>${r.compras.length}</b>` : ""}</p>
       ${r.avisos.length ? `<details class="regras" open><summary>Avisos (${r.avisos.length})</summary><ul>${r.avisos.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></details>` : ""}
-      <p class="small muted">A planilha não tem validades: o saldo entra como "sem validade informada". Lance a validade na primeira conferência. Os controlados foram marcados pelo princípio ativo: confira.</p>`;
+      <p class="small muted">${r.novos.some((p) => p.validadeInicial) ? "Produtos sem validade na planilha entram como \"sem validade informada\": lance a validade na primeira conferência." : "A planilha não tem validades: o saldo entra como \"sem validade informada\". Lance a validade na primeira conferência."} Os controlados foram marcados pelo princípio ativo: confira. Depois da importação, use <b>🖼 Buscar fotos</b>.</p>`;
     $("#modalOk").disabled = false;
   };
 }
 async function gravarPlanilha(r) {
-  const idPorCodigo = {}; let n = 0;
-  produtos.forEach((p) => p.codigo && (idPorCodigo[p.codigo] = p.id));
+  const idPorCodigo = {}, idPorNome = {}, dadosPorId = {}; let n = 0;
+  produtos.forEach((p) => { p.codigo && (idPorCodigo[p.codigo] = p.id); idPorNome[norm(p.nome)] = p.id; dadosPorId[p.id] = p; });
   for (const p of r.novos) {
     const { qtdInicial, validadeInicial, loteInicial, ...dados } = p;
     const ref = await addDoc(collection(db, "produtos"), { ...dados, fotoUrl: "", lotesEstoque: qtdInicial > 0 ? [{ qtd: qtdInicial, validade: validadeInicial || "" }] : [], lotesLimbo: [], criadoEm: serverTimestamp() });
-    idPorCodigo[p.codigo] = ref.id; (p.codigosExtras || []).forEach((c) => (idPorCodigo[c] = ref.id));
+    idPorCodigo[p.codigo] = ref.id; idPorNome[norm(p.nome)] = ref.id; dadosPorId[ref.id] = p; (p.codigosExtras || []).forEach((c) => (idPorCodigo[c] = ref.id));
     if (qtdInicial > 0) await log({ tipo: "entrada", produtoId: ref.id, produtoNome: p.nome, qtd: qtdInicial, validade: validadeInicial || "", local: "estoque", obs: "Saldo inicial (planilha)" });
     if (++n % 20 === 0) $("#plPrev").insertAdjacentHTML("afterbegin", `<p class="small">${n} de ${r.novos.length} produtos…</p>`);
   }
@@ -2278,8 +2459,19 @@ async function gravarPlanilha(r) {
     await addDoc(collection(db, "equivalencias"), { ...g, itens: g.itens.map(({ codigo, ...i }) => ({ ...i, produtoId: idPorCodigo[codigo] || "" })), criadoPor: usuario.nome, criadoEm: serverTimestamp() }); }
   for (const x of r.inventario) await addDoc(collection(db, "inventario"), { ...x, status: "Ativo", criadoPor: usuario.nome, criadoEm: serverTimestamp() });
   for (const c of r.compras) await addDoc(collection(db, "listaCompras"), { ...c, criadoEm: serverTimestamp() });
+  // Aba "Salas": cria/atualiza o ideal e o crítico de cada item em cada sala (nunca mexe nas quantidades já contadas)
+  let nSalas = 0; const semSala = [];
+  for (const x of r.salas) {
+    const sala = SALAS.find((z) => z.id === x.sala || norm(z.nome) === norm(x.sala) || (norm(x.sala) && norm(z.nome).includes(norm(x.sala))));
+    const pid = idPorCodigo[x.codigo] || idPorNome[norm(x.produto)], pd = dadosPorId[pid];
+    if (!sala || !pd) { semSala.push(`${x.sala || "?"} / ${x.codigo || x.produto}`); continue; }
+    const ref = doc(db, "salas", sala.id, "itens", pid);
+    if ((await getDoc(ref)).exists()) await updateDoc(ref, { ideal: x.ideal, critico: x.critico });
+    else await setDoc(ref, { nome: pd.nome, medida: pd.medida, controlado: !!pd.controlado, lotes: [], ideal: x.ideal, critico: x.critico });
+    nSalas++;
+  }
   window.__plan = null;
-  toast(`Importado: ${r.novos.length} produtos, ${r.grupos.length} grupos de equivalentes.`);
+  toast(`Importado: ${r.novos.length} produtos, ${r.grupos.length} grupos de equivalentes${r.salas.length ? `, ${nSalas} itens de sala${semSala.length ? ` (${semSala.length} não encontrados: ${semSala.slice(0, 3).join("; ")}…)` : ""}` : ""}.`);
 }
 
 /* ================= MEDICAMENTOS EQUIVALENTES ================= */

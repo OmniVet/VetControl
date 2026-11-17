@@ -144,8 +144,20 @@ O `firebase-config.js` traz a lista de nomes comerciais (`VACINAS_COMERCIAIS`): 
 - O botão "Carregar exemplos da clínica" cria os grupos de Cerenia/Marovet, Agemoxi CL, Terramicina LA, Elo-xicam/Maxicam e Convenia.
 
 
+## Importar planilha (modelo do VetControl)
+Estoque → **📥 Importar planilha** (master e estoquista). Dentro dela, **⬇ Baixar modelo em branco** gera o `.xlsx` do VetControl: uma aba por categoria (inclui **Medicamentos Especiais**, que vale como a categoria *Distribuidora de Medicamentos Especiais*; o Excel limita o nome da aba a 31 letras) e uma aba **Salas** (Sala · Código · Produto · Ideal na sala · Crítico) que já deixa cada setor configurado. Não mude os nomes das abas. A coluna **Estoque ideal** é opcional.
+
+### Sugestão de estoque mínimo/ideal
+Na tabela do Estoque, ao lado de Mín., aparece **Sugestão (últimos 90 dias)**: consumo médio por dia × 15 dias (mínimo) e × 30 dias (ideal), contando as reposições para os setores. É uma conta simples e conferível (sem IA). Botão **Aplicar** por produto ou **📊 Aplicar sugestões** em lote (só produtos com 60+ dias e 4+ saídas). Os dias de cobertura ficam em `DIAS_COBERTURA_MINIMO` / `DIAS_COBERTURA_IDEAL` no `firebase-config.js`. As sugestões só aparecem depois que houver reposições registradas.
+
+### Fotos automáticas
+Estoque → **🖼 Buscar fotos** usa a busca de imagens do Google (grátis, 100 buscas/dia). Para ligar: 1) crie uma chave em console.cloud.google.com → APIs → *Custom Search API* → Credenciais; 2) em programmablesearchengine.google.com crie um mecanismo com *Pesquisar na web toda* e *Pesquisa de imagens* ligados e copie o ID (cx); 3) cole em `GOOGLE_CSE_KEY` e `GOOGLE_CSE_CX` no `firebase-config.js`. Restrinja a chave ao domínio do site. As fotos automáticas ficam marcadas em "Editar produto" para conferir.
+
+### Ficha de reposição e relatório semanal
+Reposição por setor → **Ficha de reposição**: lista o ideal de cada item da sala, quanto há agora, quanto falta e uma coluna **Qtd. reposta**. **Registrar reposição** tira do estoque central e põe na sala (equipe comum fica pendente até a estoquista confirmar; controlados continuam exigindo o livro). Dá para imprimir a ficha em branco. **Relatório semanal de reposição** soma por item, setor e pessoa, compara com as 3 semanas anteriores e exporta CSV.
+
 ## Importar a planilha da clínica
-Estoque → **📥 Importar planilha da clínica** lê o `Controle_Estoque_e_Patrimonio.xlsx` no formato atual (uma aba por categoria: Hospitalar Humano, Veterinário, **Distribuidora Odontológica**, Especiais e Oncológicos, Limpeza e Escritório, Outros Custos, Instrumentais, Inventário e Compras Shopee).
+O mesmo botão lê o `Controle_Estoque_e_Patrimonio.xlsx` no formato atual (uma aba por categoria: Hospitalar Humano, Veterinário, **Distribuidora Odontológica**, Especiais e Oncológicos, Limpeza e Escritório, Outros Custos, Instrumentais, Inventário e Compras Shopee).
 - Produtos que já existem (mesmo código ou nome) são ignorados: pode importar de novo quando a planilha crescer.
 - Itens repetidos entre abas (ex.: álcool em Hospitalar e em Limpeza) viram um produto só, somando o saldo.
 - Controlados são marcados pelo princípio ativo (conferir). Produtos com o mesmo princípio ativo formam grupos de equivalentes.

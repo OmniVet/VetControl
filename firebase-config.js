@@ -20,6 +20,7 @@ export const DISTRIBUIDORAS = [
   "Veterinário",
   "Distribuidora Odontológica",
   "Especiais e Oncológicos",
+  "Distribuidora de Medicamentos Especiais",
   "Limpeza e Escritório",
   "Outros Custos"
 ];
@@ -33,6 +34,17 @@ export const SALAS = [
   { id: "geladeira_especiais", nome: "Geladeira de Medicamentos Especiais (quimioterápicos)" }
 ];
 export const DIAS_ALERTA_VALIDADE = 30;
+
+// Sugestão automática de estoque mínimo/ideal (análise das saídas dos últimos 90 dias, sem IA: conta simples e conferível)
+// Mínimo sugerido = consumo médio por dia × DIAS_COBERTURA_MINIMO (prazo de entrega + folga). Ideal = × DIAS_COBERTURA_IDEAL.
+export const DIAS_ANALISE = 90;
+export const DIAS_COBERTURA_MINIMO = 15;
+export const DIAS_COBERTURA_IDEAL = 30;
+
+// Busca automática de foto dos produtos (Google Programmable Search, busca de imagens: 100 buscas grátis por dia).
+// Chave: https://console.cloud.google.com/apis/library/customsearch.googleapis.com · Mecanismo (cx): https://programmablesearchengine.google.com (ative "Pesquisa de imagens" e "Pesquisar na web toda").
+export const GOOGLE_CSE_KEY = "";
+export const GOOGLE_CSE_CX = "";
 
 // Catálogo de exames (edite à vontade)
 // Grupo "Imagem": pede quem realizou e quem vai laudar. Demais grupos: pede o laboratório.
