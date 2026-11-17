@@ -9,7 +9,7 @@ Usuária: gestora de clínica veterinária, não programadora. Responder em port
 - `firestore.rules`: regras de segurança. Deve ser colada manualmente pela usuária no console do Firebase sempre que mudar: AVISAR.
 - `tutor.html` + `tutor.js`: portal do tutor (login por CPF → e-mail interno `<cpf>.<versão>@DOMINIO_TUTOR`)
 - `cartao.js`: cartão de vacina (visual de cartão físico, etiquetas por tipo de vacina)
-- `importar-planilha.js`: leitor da planilha Controle_Estoque_e_Patrimonio.xlsx (uma aba por categoria)
+- `importar-planilha.js`: leitor da planilha Controle_Estoque_e_Patrimonio.xlsx (uma aba por categoria + aba opcional "Salas"). Aba de 31 letras no máx.: `NOME_ABA` mapeia "Medicamentos Especiais" → categoria completa
 
 ## Organização do app.js
 Seções marcadas com `/* ================= NOME ================= */`. Navegação = array `SETORES` (quadrados do Início, cada um com abas [rota, nome]) e `telas` (rota → função) em `render()`. Topo só tem o botão Início.
@@ -17,6 +17,7 @@ Setores: 1 Solicitação de exames (nova-solicitacao, exames) · 2 Laudos (laudo
 Exame do LAB VETPLUS ou de imagem/prestador vai para "Liberar laudos" (`precisaLaudo`). Edição de solicitação grava `edicoes[]`.
 Vacinas (6), Ambulatório (7) e Orçamentos (8) vão virar um sistema próprio; continuam aqui em "Outros módulos" até lá.
 Helpers: `abrirModal(titulo, html, onSubmit, okTxt)`, `opts()`, `esc()`, `toast()`, `log()` (movimentos), `addLote/retirarFEFO`, `vencido()` (validade vale até o fim do mês), `docImpressao()` (A4/bobina).
+Sugestão de mínimo/ideal = `carregarSugestoes()` (movimentos dos últimos 90 dias, cache de 10 min). Ficha (`telaFicha`) e relatório semanal (`telaSemanal`) usam `darBaixa` / movimentos `reposicao`. Fotos automáticas: `buscarFotosAuto` (Google CSE, chaves no firebase-config).
 Perfis: master > estoquista (`podeConfirmar()`) > usuario (lançamentos viram pendências).
 
 ## Ao mudar
