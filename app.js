@@ -104,8 +104,9 @@ const opts = (arr, sel) => arr.map((o) => { const v = typeof o === "string" ? o 
 /* ================= AUTENTICAÇÃO ================= */
 $("#loginForm").onsubmit = async (e) => {
   e.preventDefault(); const f = new FormData(e.target);
-  try { await signInWithEmailAndPassword(auth, f.get("email"), f.get("senha")); }
-  catch { $("#loginErro").textContent = "E-mail ou senha inválidos."; }
+  $("#loginErro").textContent = "Entrando…";
+  try { await signInWithEmailAndPassword(auth, f.get("email").trim(), f.get("senha")); }
+  catch (err) { $("#loginErro").textContent = erroLogin(err.code); console.error(err); }
 };
 $("#esqueci").onclick = async (e) => {
   e.preventDefault(); const em = $("#loginForm").email.value;
@@ -113,16 +114,42 @@ $("#esqueci").onclick = async (e) => {
   await sendPasswordResetEmail(auth, em).catch(() => {}); $("#loginErro").textContent = "Se o e-mail existir, enviamos um link.";
 };
 $("#sair").onclick = () => signOut(auth);
+// Traduz os erros do Firebase para algo que a equipe entende
+function erroLogin(code = "") {
+  return ({
+    "auth/invalid-credential": "E-mail ou senha incorretos (ou este usuário não existe no projeto vetcontrol-2026).",
+    "auth/wrong-password": "Senha incorreta.", "auth/user-not-found": "Este e-mail não está cadastrado no Firebase (Authentication → Usuários).",
+    "auth/invalid-email": "E-mail em formato inválido.", "auth/too-many-requests": "Muitas tentativas. Espere alguns minutos ou redefina a senha.",
+    "auth/user-disabled": "Este usuário está desativado no Firebase.",
+    "auth/unauthorized-domain": "Este endereço não está autorizado. No Firebase: Authentication → Configurações → Domínios autorizados → adicionar omnivet.github.io.",
+    "auth/operation-not-allowed": "O login por e-mail/senha não está ativado. No Firebase: Authentication → Método de login → E-mail/senha.",
+    "auth/network-request-failed": "Sem conexão com o Firebase. Verifique a internet.",
+    "auth/api-key-not-valid.-please-pass-a-valid-api-key.": "A chave do Firebase no arquivo firebase-config.js está errada.",
+    "permission-denied": "O Firebase bloqueou o acesso: as REGRAS de segurança não foram publicadas (Firestore Database → Regras → colar o firestore.rules → Publicar) ou o e-mail nelas está diferente.",
+  })[code] || `Não foi possível entrar (código: ${code || "desconhecido"}).`;
+}
 
 onAuthStateChanged(auth, async (u) => {
   window.__vcPronto = true; $("#semConexao")?.classList.add("hidden");
   if (!u) { usuario = null; $("#app").classList.add("hidden"); $("#login").classList.remove("hidden"); return; }
-  const ref = doc(db, "users", u.uid); let snap = await getDoc(ref);
-  if (!snap.exists() && u.email.toLowerCase() === MASTER_EMAIL.toLowerCase()) {
-    await setDoc(ref, { nome: "Master", email: u.email, role: "master", ativo: true, criadoEm: serverTimestamp() });
-    snap = await getDoc(ref);
+  let snap;
+  try {
+    const ref = doc(db, "users", u.uid); snap = await getDoc(ref);
+    if (!snap.exists() && u.email.toLowerCase() === MASTER_EMAIL.toLowerCase()) {
+      await setDoc(ref, { nome: "Master", email: u.email, role: "master", ativo: true, criadoEm: serverTimestamp() });
+      snap = await getDoc(ref);
+    }
+  } catch (err) {
+    console.error(err); await signOut(auth);
+    $("#loginErro").textContent = err.code === "failed-precondition" || /database.*not.*exist|NOT_FOUND/i.test(err.message)
+      ? "O banco de dados ainda não foi criado. No Firebase: Firestore Database → Criar banco de dados." : erroLogin(err.code);
+    return;
   }
-  if (!snap.exists() || snap.data().ativo === false) { alert("Usuário sem acesso. Fale com o administrador."); return signOut(auth); }
+  if (!snap.exists() || snap.data().ativo === false) {
+    await signOut(auth);
+    $("#loginErro").textContent = u.email.toLowerCase() === MASTER_EMAIL.toLowerCase() ? "Não foi possível criar o perfil master." : "Usuário sem acesso ao VetControl. Peça ao master para cadastrar você em ⚙️ Usuários.";
+    return;
+  }
   usuario = { uid: u.uid, ...snap.data() };
   $("#userNome").textContent = `${usuario.nome} (${usuario.role})`;
   document.querySelectorAll(".so-master").forEach((el) => el.classList.toggle("hidden", !isMaster()));
