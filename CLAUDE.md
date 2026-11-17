@@ -12,8 +12,10 @@ Usuária: gestora de clínica veterinária, não programadora. Responder em port
 - `importar-planilha.js`: leitor da planilha Controle_Estoque_e_Patrimonio.xlsx (uma aba por categoria)
 
 ## Organização do app.js
-Seções marcadas com `/* ================= NOME ================= */`. Menu = `SECOES` (seção → abas) e `telas` (rota → função) em `render()`.
-Painéis: 1 Estoque (produtos, salas/setores, limbo, pendências, XML NF-e, alertas, equivalentes) · 2 Exames (planilhas lab/prestadores, comparativo, laudos) · 3 Inventário · 4 Pedidos · 5 Relatórios · 6 Orçamentos · 7 Vacinas · 8 Ambulatório.
+Seções marcadas com `/* ================= NOME ================= */`. Navegação = array `SETORES` (quadrados do Início, cada um com abas [rota, nome]) e `telas` (rota → função) em `render()`. Topo só tem o botão Início.
+Setores: 1 Solicitação de exames (nova-solicitacao, exames) · 2 Laudos (laudos-pendentes, modelos, laudos-liberados) · 3 Histórico de exames (planilha, prestadores, producao, comparativo, exportar-exames) · 4 Solicitação de compras · 5 Relatórios gerais · 9 Estoque · Reposição por setor (salas) · Inventário · Configurações (master).
+Exame do LAB VETPLUS ou de imagem/prestador vai para "Liberar laudos" (`precisaLaudo`). Edição de solicitação grava `edicoes[]`.
+Vacinas (6), Ambulatório (7) e Orçamentos (8) vão virar um sistema próprio; continuam aqui em "Outros módulos" até lá.
 Helpers: `abrirModal(titulo, html, onSubmit, okTxt)`, `opts()`, `esc()`, `toast()`, `log()` (movimentos), `addLote/retirarFEFO`, `vencido()` (validade vale até o fim do mês), `docImpressao()` (A4/bobina).
 Perfis: master > estoquista (`podeConfirmar()`) > usuario (lançamentos viram pendências).
 

@@ -159,28 +159,34 @@ onAuthStateChanged(auth, async (u) => {
 
 /* ================= ROTEADOR ================= */
 window.addEventListener("hashchange", render);
-const SECOES = {
-  estoque: [["produtos", "Estoque central"], ["equivalentes", "Medicamentos equivalentes"], ["salas", "Salas e setores"], ["limbo", "Limbo"], ["pendencias", "Pendências"], ["nfe", "Receber XML"], ["alertas", "Alertas"]],
-  exames: [["planilha", "Planilha laboratoriais"], ["prestadores", "Planilha imagem e prestadores"], ["comparativo", "Comparativo com laboratório"], ["exames", "Solicitações"], ["modelos", "Modelos de laudo"], ["catalogo", "Catálogo"], ["profissionais", "Profissionais"]],
-  inventario: [["inventario", "Equipamentos e móveis"]],
-  pedidos: [["solicitacoes", "Solicitações de reposição"], ["pedido", "Pedido de compra"], ["cotacao", "Pedido de cotação"], ["fornecedores", "Fornecedores"]],
-  orcamentos: [["orcamento", "Novo orçamento"], ["orcamentos", "Orçamentos emitidos"], ["servicos", "Tabela de serviços"], ["pacotes", "Pacotes"]],
-  relatorios: [["relatorios", "Gerador de relatórios"]],
-  vacinas: [["vacinas", "Situação das vacinas"], ["vencimentos", "Vencimentos (3d · 1 sem · 15d · 30d · 3 meses)"], ["pets", "Pets e cartões"]],
-  ambulatorio: [["ambulatorio", "Roteiro"]],
-  config: [["usuarios", "Usuários"]]
-};
+// Setores do Início (quadrados grandes). abas: [rota, nome]
+const SETORES = [
+  { id: "solic", n: "1", titulo: "Solicitação de exames", icone: "🧪", abas: [["nova-solicitacao", "1.1 Nova solicitação de exames"], ["exames", "1.2 Consultar solicitações realizadas"]] },
+  { id: "laudos", n: "2", titulo: "Laudos", icone: "📝", abas: [["laudos-pendentes", "2.1 Liberar laudos"], ["modelos", "2.2 Modelos de laudos"], ["laudos-liberados", "2.3 Consultar laudos liberados"]] },
+  { id: "historico", n: "3", titulo: "Histórico de exames", icone: "📊", abas: [["planilha", "Exames laboratoriais"], ["prestadores", "Imagem e prestadores"], ["producao", "Produção por médico (semana)"], ["comparativo", "Comparativo com laboratório"], ["exportar-exames", "Exportar relatórios de exames"]] },
+  { id: "compras", n: "4", titulo: "Solicitação de compras", icone: "🛒", abas: [["solicitacoes", "Pedir algo ao estoquista"]] },
+  { id: "relatorios", n: "5", titulo: "Relatórios gerais", icone: "📈", abas: [["relatorios", "Gerador de relatórios"]] },
+  { id: "estoque", n: "9", titulo: "Estoque", icone: "📦", abas: [["produtos", "9.1 Estoque geral"], ["limbo", "9.2 Limbo"], ["pedido", "9.3 Detalhes de pedido"], ["pendencias", "Pendências"], ["nfe", "Receber nota (XML)"], ["alertas", "Alertas"], ["equivalentes", "Medicamentos equivalentes"], ["cotacao", "Cotação"]] },
+  { id: "reposicao", n: "", titulo: "Reposição por setor", icone: "🏥", abas: [["salas", "Salas, geladeiras e setores"]] },
+  { id: "inventario", n: "", titulo: "Inventário (patrimônio)", icone: "🪑", abas: [["inventario", "Equipamentos e móveis"]] },
+  { id: "config", n: "", titulo: "Configurações", icone: "⚙️", master: true, abas: [["usuarios", "Usuários"], ["fornecedores", "Fornecedores"], ["profissionais", "Profissionais"], ["catalogo", "Catálogo de exames"]] },
+  // Módulos que vão virar um sistema próprio (continuam funcionando aqui enquanto isso)
+  { id: "vacinas", n: "6", titulo: "Vacinas", icone: "💉", outro: true, abas: [["vacinas", "Situação das vacinas"], ["vencimentos", "Vencimentos"], ["pets", "Pets e cartões"]] },
+  { id: "ambulatorio", n: "7", titulo: "Ambulatório", icone: "🩺", outro: true, abas: [["ambulatorio", "Roteiro"]] },
+  { id: "orcamentos", n: "8", titulo: "Orçamentos", icone: "💰", outro: true, abas: [["orcamentos", "8.1 Histórico de orçamentos"], ["orcamento", "8.2 Novo orçamento"], ["servicos", "8.3 Banco de serviços"], ["pacotes", "Pacotes"]] },
+];
 async function render() {
   if (!usuario) return;
   const rota = location.hash.slice(1).split("?")[0] || "painel";
-  const sec = Object.keys(SECOES).find((k) => SECOES[k].some(([r]) => r === rota)) || "painel";
-  document.querySelectorAll("#menu a").forEach((a) => a.classList.toggle("ativo", a.dataset.sec === sec));
-  $("#subnav").innerHTML = (SECOES[sec] || []).filter(([r]) => isMaster() || !["fornecedores", "usuarios"].includes(r))
-    .map(([r, n]) => `<a href="#${r}" class="${r === rota ? "ativo" : ""}">${n}</a>`).join("");
+  const sec = SETORES.find((x) => x.abas.some(([r]) => r === rota));
+  $("#subnav").innerHTML = sec ? `<div class="setor-titulo"><span>${sec.icone}</span> ${sec.n ? sec.n + " · " : ""}${esc(sec.titulo)}</div>
+    <div class="setor-abas">${sec.abas.map(([r, n]) => `<a href="#${r}" class="${r === rota ? "ativo" : ""}">${n}</a>`).join("")}</div>` : "";
   atualizarBadge();
   const v = $("#view"); v.innerHTML = `<p class="muted">Carregando…</p>`;
-  const telas = { equivalentes: telaEquivalentes, vencimentos: telaVencimentos, vacinas: telaVacinas, pets: telaPets, ambulatorio: telaAmbulatorio, orcamento: telaOrcamento, orcamentos: telaOrcamentos, servicos: telaServicos, pacotes: telaPacotes, prestadores: (v) => telaPlanilha(v, "prest"), comparativo: telaComparativo, modelos: telaModelos, limbo: telaLimbo, pendencias: telaPendencias, planilha: telaPlanilha, catalogo: telaCatalogo, painel: telaPainel, alertas: telaAlertas, profissionais: telaProfissionais, cotacao: telaCotacao, inventario: telaInventario, nfe: telaNfe, solicitacoes: telaSolicitacoes, exames: telaExames, produtos: telaProdutos, salas: telaSalas, pedido: telaPedido, relatorios: telaRelatorios, fornecedores: telaFornecedores, usuarios: telaUsuarios };
+  const telas = { "nova-solicitacao": telaNovaSolicitacao, "laudos-pendentes": telaLaudosPendentes, "laudos-liberados": telaLaudosLiberados, producao: telaProducao, "exportar-exames": (v) => telaRelatorios(v, "exames"),
+    equivalentes: telaEquivalentes, vencimentos: telaVencimentos, vacinas: telaVacinas, pets: telaPets, ambulatorio: telaAmbulatorio, orcamento: telaOrcamento, orcamentos: telaOrcamentos, servicos: telaServicos, pacotes: telaPacotes, prestadores: (v) => telaPlanilha(v, "prest"), comparativo: telaComparativo, modelos: telaModelos, limbo: telaLimbo, pendencias: telaPendencias, planilha: telaPlanilha, catalogo: telaCatalogo, painel: telaPainel, alertas: telaAlertas, profissionais: telaProfissionais, cotacao: telaCotacao, inventario: telaInventario, nfe: telaNfe, solicitacoes: telaSolicitacoes, exames: telaExames, produtos: telaProdutos, salas: telaSalas, pedido: telaPedido, relatorios: telaRelatorios, fornecedores: telaFornecedores, usuarios: telaUsuarios };
   try { await (telas[rota] || telaPainel)(v); } catch (e) { v.innerHTML = `<p class="erro">Erro: ${esc(e.message)}</p>`; console.error(e); }
+  window.scrollTo(0, 0);
 }
 
 /* ================= ESTOQUE / PRODUTOS ================= */
@@ -926,25 +932,29 @@ async function telaAlertas(v) {
 
 /* ================= INÍCIO (5 PAINÉIS) ================= */
 async function telaPainel(v) {
-  const [A, exs, sols, inv] = await Promise.all([calcAlertas(), getDocs(collection(db, "exames")), getDocs(query(collection(db, "solicitacoes"), where("status", "==", "Pendente"))), getDocs(collection(db, "inventario"))]);
-  const exAbertos = exs.docs.filter((d) => !["Entregue ao tutor", "Cancelado"].includes(d.data().status)).length;
-  const invAtivos = inv.docs.map((d) => d.data()).filter((x) => x.status !== "Baixado");
-  const b = $("#badgeAlerta"); b.textContent = A.filter((a) => a.nivel === "critico").length; b.classList.toggle("hidden", !Number(b.textContent));
-  const card = (href, titulo, linhas) => `<a href="${href}"><div class="card"><h3>${titulo}</h3>${linhas}</div></a>`;
-  v.innerHTML = `<div class="barra"><h2>Olá, ${esc(usuario.nome)}</h2></div><div class="hub">
-    ${card("#produtos", "1 · Estoque", `<p>${produtos.length} produtos no estoque central e nas salas</p><p><span class="tag critico">${A.filter((a) => a.tipo === "Quantidade").length} quantidade</span> <span class="tag alerta">${A.filter((a) => a.tipo === "Validade").length} validade</span> <span class="tag neutro">${A.filter((a) => a.tipo === "Sem uso").length} sem uso</span></p><p class="muted small">Estoque · Salas · Receber XML · Alertas</p>`)}
-    ${card("#planilha", "2 · Exames", `<p><b>${exAbertos}</b> solicitações em aberto</p><p class="muted small">Imagem (quem realizou e quem lauda) · Laboratoriais · Particular ou convênio</p>`)}
-    ${card("#inventario", "3 · Inventário", `<p><b>${invAtivos.length}</b> itens · ${brl(invAtivos.reduce((s, x) => s + x.qtd * x.valorUnit, 0))}</p><p class="muted small">Equipamentos, móveis e objetos</p>`)}
-    ${card("#solicitacoes", "4 · Pedidos", `<p><b>${sols.size}</b> solicitações de reposição pendentes</p><p class="muted small">Reposição · Pedido de compra · Cotação</p>`)}
-    ${card("#orcamento", "6 · Orçamentos", `<p>Orçamentos em PDF com preço pelo peso e pela tabela (particular, social, planos)</p><p class="muted small">Simples ou comparativo · validade de ${VALIDADE_ORCAMENTO_DIAS} dias</p>`)}
-    ${card("#vacinas", "7 · Vacinas", `<p>Quem está em dia, a vencer, atrasado e quem não veio</p><p class="muted small">Cartão de vacina online · WhatsApp · portal do tutor</p>`)}
-    ${card("#ambulatorio", "8 · Ambulatório", `<p>Roteiro de check-ups, exames, consultas e medicações programadas</p><p class="muted small">Hoje · semana · atrasados · recorrência</p>`)}
-    ${card("#relatorios", "5 · Relatórios", `<p>Monte relatórios de estoque, salas, exames, inventário e pedidos</p><p class="muted small">Filtrar · agrupar · exportar CSV · imprimir</p>`)}
-  </div>`;
+  const vis = SETORES.filter((x) => !x.master || isMaster());
+  const tile = (x) => `<a class="tile ${x.outro ? "tile-outro" : ""}" href="#${x.abas[0][0]}"><span class="tile-ico">${x.icone}</span><b>${x.n ? x.n + " · " : ""}${esc(x.titulo)}</b><span class="tile-info" id="info-${x.id}"></span></a>`;
+  v.innerHTML = `<h2 class="ola">Olá, ${esc(usuario.nome)} 👋</h2>
+    <div class="tiles">${vis.filter((x) => !x.outro).map(tile).join("")}</div>
+    <h3 class="muted" style="margin-top:26px">Outros módulos <small>(serão um sistema próprio)</small></h3>
+    <div class="tiles tiles-peq">${vis.filter((x) => x.outro).map(tile).join("")}</div>`;
+  // números de apoio nos quadrados (carregam depois, sem travar a tela)
+  try {
+    const [exs, sols, pend] = await Promise.all([getDocs(collection(db, "exames")), getDocs(query(collection(db, "solicitacoes"), where("status", "==", "Pendente"))), podeConfirmar() ? getDocs(query(collection(db, "pendencias"), where("status", "==", "Pendente"))) : null]);
+    const itens = exs.docs.flatMap((d) => (d.data().exames || []).map(normEx));
+    const set = (id, t) => { const el = document.getElementById("info-" + id); if (el) el.innerHTML = t; };
+    set("laudos", `${itens.filter(precisaLaudo).length} laudo(s) pendente(s)`);
+    set("solic", `${exs.size} solicitação(ões)`);
+    set("compras", sols.size ? `<span class="tag critico">${sols.size} pendente(s)</span>` : "");
+    if (pend?.size) set("estoque", `<span class="tag critico">${pend.size} para confirmar</span>`);
+  } catch (e) { console.warn(e); }
 }
 
 /* ================= EXAMES ================= */
 const GRUPO_IMAGEM = "Imagem";
+const agoraLocal = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+// Precisa de laudo feito na clínica: imagem/prestador ou exame do LAB VETPLUS, ainda não liberado
+const precisaLaudo = (e) => e.laudo !== "SIM" && (e.laudoPendente || isPrest(e) || /vetplus/i.test(e.laboratorio || ""));
 const isPrest = (o) => ["Imagem", "Prestador"].includes(o?.grupo);
 const origemDe = (e, x = {}) => e.origem || ((e.pagamento || x.pagamento) === "Convênio" ? String(e.convenio || x.convenio || "").toUpperCase() : "PARTICULAR");
 const grupoDe = (nome) => Object.entries(EXAMES).find(([, l]) => l.includes(nome))?.[0] || "Outros";
@@ -955,7 +965,7 @@ async function carregarProfissionais() { return (await getDocs(query(collection(
 let filtroEx = { status: "abertos", busca: "", pag: "" };
 async function telaExames(v) {
   const todos = (await getDocs(query(collection(db, "exames"), orderBy("criadoEm", "desc")))).docs.map((d) => ({ id: d.id, ...d.data() }));
-  v.innerHTML = `<div class="barra"><h2>Solicitações de exames</h2>
+  v.innerHTML = `<div class="barra"><h2>Solicitações realizadas</h2><a class="btn" href="#nova-solicitacao">+ Nova solicitação</a>
     <input id="bEx" placeholder="Buscar paciente, tutor, profissional, laboratório…" value="${esc(filtroEx.busca)}">
     <select id="fEx"><option value="abertos">Em aberto</option><option value="todos">Todos</option>${opts(STATUS_EXAME)}</select>
     <select id="pEx"><option value="">Particular + convênios</option><option>Particular</option>${opts(CONVENIOS)}</select>
@@ -974,7 +984,7 @@ async function telaExames(v) {
       <td class="small">${x.exames.map((e) => `<div>${esc(descEx(e))}</div>`).join("")}</td>
       <td>${x.pagamento === "Convênio" ? `<span class="tag alerta">${esc(x.convenio)}</span>` : `<span class="tag neutro">Particular</span>`}${x.prioridade === "Urgente" ? ` <span class="tag critico">Urgente</span>` : ""}</td>
       <td>${esc(x.veterinario)}</td>
-      <td><span class="tag ${corStatus(x.status)}">${x.status}</span></td>
+      <td><span class="tag ${corStatus(x.status)}">${x.status}</span>${x.edicoes?.length ? `<div class="small" style="color:#8a5a00" title="${esc(x.edicoes.map((ed) => ed.por + " em " + new Date(ed.em).toLocaleString("pt-BR")).join("\n"))}">✏️ editado por ${esc(x.edicoes.at(-1).por)}<br>${new Date(x.edicoes.at(-1).em).toLocaleString("pt-BR").slice(0, 17)}</div>` : ""}</td>
       <td class="acoes-linha"><button class="btn small" data-st="${x.id}">Status</button><button class="btn small" data-pr="${x.id}">Imprimir</button>
         <button class="btn small" data-ed="${x.id}">Editar</button>${isMaster() ? `<button class="btn small danger" data-dx="${x.id}">Excluir</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">Nenhuma solicitação.</td></tr>`;
   };
@@ -995,7 +1005,7 @@ async function telaExames(v) {
 
 async function carregarCatalogo() { return (await getDocs(query(collection(db, "catalogoExames"), orderBy("nome")))).docs.map((d) => ({ id: d.id, ...d.data() })).filter((c) => c.ativo !== false); }
 
-async function modalExame(x = {}, profs = []) {
+async function modalExame(x = {}, profs = [], cfg = {}) {
   const cat = await carregarCatalogo();
   if (!cat.length) { toast("Cadastre o catálogo de exames primeiro (aba Catálogo de exames)."); location.hash = "#catalogo"; return; }
   let itens = (x.exames || []).map(normEx).map((e) => ({ ...e }));
@@ -1008,6 +1018,7 @@ async function modalExame(x = {}, profs = []) {
     <div class="duas"><label>Tutor<input name="tutor" required value="${esc(x.tutor)}"></label><label>Telefone<input name="telefone" value="${esc(x.telefone)}"></label></div>
     <div class="duas"><label>Veterinário solicitante<input name="veterinario" required value="${esc(x.veterinario || usuario.nome)}"></label>
     <label>Prioridade<select name="prioridade">${opts(["Rotina", "Urgente"], x.prioridade)}</select></label></div>
+    <label>📅 Data e hora da coleta<input type="datetime-local" name="dataColeta" id="dtColeta" required value="${esc(x.dataColeta || agoraLocal())}"></label>
     <label>Adicionar exame do catálogo<input list="dlCat" id="addCat" placeholder="Digite: perfil renal, hemograma, ultrassom…"></label>
     <datalist id="dlCat">${cat.map((c) => `<option value="${esc(c.nome)} — ${esc(isPrest(c) ? "Imagem" : c.laboratorio)}">`).join("")}</datalist>
     <div class="barra"><span class="muted small">Pagamento para todos:</span><button type="button" class="btn small" id="todosPart">Particular</button>${CONVENIOS.map((c) => `<button type="button" class="btn small" data-tc="${esc(c)}">${esc(c)}</button>`).join("")}</div>
@@ -1017,14 +1028,17 @@ async function modalExame(x = {}, profs = []) {
     lerItens();
     if (!itens.length) throw new Error("Adicione pelo menos um exame.");
     if (itens.some((e) => !e.realizadoEm)) throw new Error("Informe a data e hora de realização de cada exame.");
-    itens.forEach((e) => { e.origem = e.pagamento === "Convênio" ? String(e.convenio).toUpperCase() : "PARTICULAR"; });
+    itens.forEach((e) => { e.origem = e.pagamento === "Convênio" ? String(e.convenio).toUpperCase() : "PARTICULAR";
+      if (/vetplus/i.test(e.laboratorio || "") && e.laudo !== "SIM") e.laudoPendente = true; }); // VETPLUS = laudo feito aqui: vai para "Liberar laudos"
     const d = { paciente: f.paciente.trim(), especie: f.especie, raca: f.raca, idade: f.idade, peso: f.peso, sexo: f.sexo, tutor: f.tutor.trim(), telefone: f.telefone,
-      veterinario: f.veterinario, prioridade: f.prioridade, exames: itens, obs: f.obs,
+      veterinario: f.veterinario, prioridade: f.prioridade, exames: itens, obs: f.obs, dataColeta: f.dataColeta,
       pagamento: itens.some((e) => e.pagamento === "Convênio") ? "Convênio" : "Particular", convenio: [...new Set(itens.map((e) => e.convenio).filter(Boolean))].join(", ") };
-    if (x.id) await updateDoc(doc(db, "exames", x.id), d);
+    if (x.id) await updateDoc(doc(db, "exames", x.id), { ...d, editado: true, edicoes: [...(x.edicoes || []), { por: usuario.nome, em: new Date().toISOString() }] });
     else await addDoc(collection(db, "exames"), { ...d, status: "Solicitado", historico: [{ status: "Solicitado", por: usuario.nome, em: new Date().toISOString() }], criadoPor: usuario.nome, criadoUid: usuario.uid, criadoEm: serverTimestamp() });
-    toast("Solicitação salva e lançada na planilha do mês.");
+    toast(itens.some((e) => e.laudoPendente) ? "Solicitação salva. Exame do LAB VETPLUS enviado para Laudos → Liberar laudos." : "Solicitação salva.");
+    cfg.aposSalvar?.();
   });
+  $("#dtColeta").onchange = (ev) => { lerItens(); itens.forEach((e) => (e.realizadoEm = ev.target.value)); desenhar(); };
   function lerItens() {
     $("#itensEx").querySelectorAll("[data-k]").forEach((r) => { const e = itens[r.dataset.k];
       e.realizadoEm = r.querySelector(".ih").value; e.pagamento = r.querySelector(".ip").value; e.convenio = e.pagamento === "Convênio" ? r.querySelector(".ic").value : "";
@@ -1043,7 +1057,7 @@ async function modalExame(x = {}, profs = []) {
   $("#addCat").onchange = (e) => {
     const c = cat.find((c) => `${c.nome} — ${isPrest(c) ? "Imagem" : c.laboratorio}` === e.target.value); if (!c) return;
     const agora = new Date(); agora.setMinutes(agora.getMinutes() - agora.getTimezoneOffset());
-    lerItens(); itens.push({ realizadoEm: agora.toISOString().slice(0, 16), catId: c.id, nome: c.nome, grupo: c.grupo, laboratorio: isPrest(c) ? "" : c.laboratorio, pontos: Number(c.pontos || 1), pagamento: "Particular", convenio: "",
+    lerItens(); itens.push({ realizadoEm: $("#dtColeta").value || agora.toISOString().slice(0, 16), catId: c.id, nome: c.nome, grupo: c.grupo, laboratorio: isPrest(c) ? "" : c.laboratorio, pontos: Number(c.pontos || 1), pagamento: "Particular", convenio: "",
       coleta: isPrest(c) ? null : { status: "Aguardando" } });
     e.target.value = ""; desenhar();
   };
@@ -1376,7 +1390,13 @@ function imprimirLaudo(l, fmt = "a4") {
     <p style="text-align:right;margin-top:20px"><small>Liberado em ${l.liberadoEm?.toDate ? l.liberadoEm.toDate().toLocaleString("pt-BR") : new Date().toLocaleString("pt-BR")}</small></p>
     ${assinaturaHtml({ nome: l.profissional, crmv: l.crmv, assinatura: l.assinatura })}`, fmt, `Laudo ${l.exame} - ${l.paciente}`);
 }
-async function verLaudo(id) { const d = await getDoc(doc(db, "laudos", id)); if (d.exists()) imprimirLaudo(d.data()); }
+async function verLaudo(id) { const d = await getDoc(doc(db, "laudos", id)); if (d.exists()) abrirLaudo(d.data()); }
+function abrirLaudo(l) {
+  if (l.pdfLink) return window.open(l.pdfLink, "_blank");
+  if (l.pdf) { const b = atob(l.pdf.split(",")[1]), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+    return window.open(URL.createObjectURL(new Blob([u], { type: "application/pdf" })), "_blank"); }
+  imprimirLaudo(l);
+}
 
 /* ================= PEDIDO DE COTAÇÃO ================= */
 async function telaCotacao(v) {
@@ -1463,7 +1483,7 @@ const FONTES = {
       return s.docs.map((d) => d.data()).map((x) => ({ Data: fmtTs(x.criadoEm), Produto: x.produtoNome, Novo: x.novo ? "Sim" : "Não", Quantidade: x.qtd, Para: nomeSala(x.sala), Urgência: x.urgencia, Solicitante: x.solicitanteNome, Status: x.status, "Atendido por": x.atendidoPor || "" })); } }
 };
 
-async function telaRelatorios(v) {
+async function telaRelatorios(v, preset = "") {
   v.innerHTML = `<div class="card no-print" style="margin-bottom:14px"><h2 style="margin-top:0">Gerador de relatórios</h2>
     <div class="duas"><label>Relatório<select id="rF">${Object.entries(FONTES).map(([k, f]) => `<option value="${k}">${f.nome}</option>`).join("")}</select></label>
     <div class="duas" id="rDatas"><label>De<input type="date" id="rIni" value="${addDias(-30)}"></label><label>Até<input type="date" id="rFim" value="${hoje()}"></label></div></div>
@@ -1474,6 +1494,7 @@ async function telaRelatorios(v) {
   let linhas = [], cols = [];
   const fonte = () => FONTES[$("#rF").value];
   $("#rF").onchange = () => { $("#rDatas").classList.toggle("hidden", !fonte().data); $("#rG").innerHTML = `<option value="">— sem resumo —</option>`; $("#rRes").innerHTML = ""; };
+  if (preset) { $("#rF").value = preset; }
   $("#rF").onchange();
   const gerar = async () => {
     const f = fonte();
@@ -2350,4 +2371,79 @@ function modalGrupoEquiv(g = { itens: [] }) {
   }
   $("#eqAdd").onclick = () => { ler(); itens.push({ nome: "", fabricante: "", concentracao: "", relacao: "identico", ressalva: "", produtoId: "", fotoUrl: "", preferencial: false }); des(); };
   des(); $("#modal .modal-card").style.width = "min(760px,100%)";
+}
+
+
+/* ================= 1.1 NOVA SOLICITAÇÃO (tela própria) ================= */
+async function telaNovaSolicitacao(v) {
+  const profs = await carregarProfissionais();
+  v.innerHTML = `<div class="card grande-acao"><span style="font-size:3rem">🧪</span><h2>Nova solicitação de exames</h2>
+    <p class="muted">Dados do pet e do tutor, quem está solicitando, data da coleta e, em cada exame, se é particular ou qual plano.<br>Exames para o <b>LAB VETPLUS</b> e de imagem vão automaticamente para <b>Laudos → Liberar laudos</b>.</p>
+    <button class="btn primary grande" id="abrirForm">+ Preencher nova solicitação</button></div>`;
+  const abrir = () => modalExame({}, profs, { aposSalvar: () => (location.hash = "#exames") });
+  $("#abrirForm").onclick = abrir; abrir();
+}
+
+/* ================= 2.1 LIBERAR LAUDOS / 2.3 LAUDOS LIBERADOS ================= */
+async function telaLaudosPendentes(v) {
+  const [docs, profs] = await Promise.all([getDocs(collection(db, "exames")).then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() }))), carregarProfissionais()]);
+  const pend = docs.flatMap((x) => (x.exames || []).map(normEx).map((e, k) => ({ x, e, k }))).filter(({ e }) => precisaLaudo(e))
+    .sort((a, b) => (a.x.prioridade === "Urgente" ? -1 : 0) - (b.x.prioridade === "Urgente" ? -1 : 0) || (a.e.realizadoEm || "").localeCompare(b.e.realizadoEm || ""));
+  v.innerHTML = `<div class="barra"><h2>Laudos para liberar (${pend.length})</h2></div>
+  <p class="muted small">Exames de imagem e do LAB VETPLUS entram aqui sozinhos. Libere pelo <b>modelo</b> (texto com assinatura digital) ou <b>anexe o PDF</b> pronto.</p>
+  <div class="tabela-wrap"><table><thead><tr><th>Coleta / realização</th><th>Paciente / tutor</th><th>Exame</th><th>Destino</th><th>Solicitante</th><th></th></tr></thead><tbody>
+  ${pend.map(({ x, e }, i) => `<tr><td>${e.realizadoEm ? new Date(e.realizadoEm).toLocaleString("pt-BR").slice(0, 17) : "—"}${x.prioridade === "Urgente" ? ` <span class="tag critico">Urgente</span>` : ""}</td>
+    <td><b>${esc(x.paciente)}</b><div class="muted small">${esc(x.tutor)}</div></td><td><b>${esc(e.nome)}</b></td>
+    <td class="small">${isPrest(e) ? "Imagem" + (e.realizadoPor ? " · " + esc(e.realizadoPor) : "") : esc(e.laboratorio || "")}</td><td>${esc(x.veterinario || "")}</td>
+    <td class="acoes-linha"><button class="btn small primary" data-m="${i}">📝 Pelo modelo</button><button class="btn small" data-p="${i}">📎 Anexar PDF</button></td></tr>`).join("") || `<tr><td colspan="6" class="muted">Nenhum laudo pendente. 👍</td></tr>`}</tbody></table></div>`;
+  v.querySelectorAll("[data-m]").forEach((b) => (b.onclick = () => { const r = pend[b.dataset.m]; emitirLaudo(r.x, r.e, r.k, profs); }));
+  v.querySelectorAll("[data-p]").forEach((b) => (b.onclick = () => anexarLaudoPdf(pend[b.dataset.p], profs)));
+}
+function anexarLaudoPdf({ x, e, k }, profs) {
+  const laud = profs.filter((p) => p.podeLaudar);
+  abrirModal(`📎 Anexar laudo em PDF — ${e.nome} · ${x.paciente}`, `
+    <label>Arquivo PDF (até 700 KB)<input type="file" name="pdf" accept="application/pdf"></label>
+    <p class="muted small">PDF maior? Salve no Google Drive, copie o link de compartilhamento e cole abaixo.</p>
+    <label>…ou link do PDF<input name="link" placeholder="https://drive.google.com/…"></label>
+    <label>Profissional responsável<select name="prof"><option value="">—</option>${laud.map((p) => `<option value="${p.id}" ${p.nome === (e.laudoPor || e.realizadoPor) ? "selected" : ""}>${esc(p.nome)}</option>`).join("")}</select></label>`,
+  async (f, form) => {
+    const arq = form.pdf.files[0]; let pdf = "";
+    if (arq) { if (arq.size > 700 * 1024) throw new Error("PDF maior que 700 KB: use o link do Google Drive."); pdf = await new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(arq); }); }
+    if (!pdf && !f.link.trim()) throw new Error("Escolha o PDF ou cole o link.");
+    const p = laud.find((p) => p.id === f.prof);
+    const ref = await addDoc(collection(db, "laudos"), { exameId: x.id, k, paciente: x.paciente, tutor: x.tutor, exame: e.nome, pdf, pdfLink: f.link.trim(), nomeArquivo: arq?.name || "",
+      profissional: p?.nome || "", crmv: p?.crmv || "", liberadoPor: usuario.nome, liberadoEm: serverTimestamp() });
+    await salvarCampo(x.id, k, "laudoId", ref.id); await salvarCampo(x.id, k, "laudo", "SIM");
+    toast("Laudo anexado e liberado.");
+  }, "Liberar laudo");
+}
+async function telaLaudosLiberados(v) {
+  const ls = (await getDocs(query(collection(db, "laudos"), orderBy("liberadoEm", "desc")))).docs.map((d) => ({ id: d.id, ...d.data() }));
+  let busca = "";
+  v.innerHTML = `<div class="barra"><h2>Laudos liberados</h2><input id="lbB" placeholder="Buscar paciente, tutor, exame, profissional…"></div>
+    <div class="tabela-wrap"><table><thead><tr><th>Liberado em</th><th>Paciente / tutor</th><th>Exame</th><th>Profissional</th><th>Formato</th><th></th></tr></thead><tbody id="lbTb"></tbody></table></div>`;
+  const des = () => { const b = busca.toLowerCase();
+    $("#lbTb").innerHTML = ls.filter((l) => !b || `${l.paciente} ${l.tutor} ${l.exame} ${l.profissional}`.toLowerCase().includes(b)).map((l) => `<tr><td>${fmtTs(l.liberadoEm)}</td>
+      <td><b>${esc(l.paciente)}</b><div class="muted small">${esc(l.tutor || "")}</div></td><td>${esc(l.exame)}</td><td>${esc(l.profissional || "")}<div class="muted small">por ${esc(l.liberadoPor || "")}</div></td>
+      <td>${l.pdf || l.pdfLink ? `<span class="tag neutro">PDF</span>` : `<span class="tag ok">Modelo</span>`}</td><td><button class="btn small primary" data-v="${l.id}">Abrir</button></td></tr>`).join("") || `<tr><td colspan="6" class="muted">Nenhum laudo.</td></tr>`; };
+  des(); $("#lbB").oninput = (e) => { busca = e.target.value; des(); };
+  $("#lbTb").onclick = (e) => { const b = e.target.closest("[data-v]"); if (b) abrirLaudo(ls.find((l) => l.id === b.dataset.v)); };
+}
+
+/* ================= 3 · PRODUÇÃO POR MÉDICO, POR SEMANA ================= */
+const inicioSemana = (iso) => { const d = new Date((iso || hoje()).slice(0, 10) + "T12:00"); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
+async function telaProducao(v) {
+  const linhas = await linhasDoMes(planMes);
+  const montar = (filtro, chave) => { const m = {}, sem = new Set();
+    linhas.filter(filtro).forEach(({ x, e }) => { const k = chave(x, e) || "(sem nome)", s = inicioSemana(e.realizadoEm); sem.add(s); m[k] ??= {}; m[k][s] = (m[k][s] || 0) + 1; });
+    return { m, sem: [...sem].sort() }; };
+  const tabela = (titulo, { m, sem }) => `<div class="card" style="margin-bottom:14px"><h3 style="margin-top:0">${titulo}</h3><div class="tabela-wrap"><table><thead><tr><th>Profissional</th>${sem.map((s) => `<th>Semana de ${fmtData(s).slice(0, 5)}</th>`).join("")}<th>Total</th></tr></thead><tbody>
+    ${Object.entries(m).sort((a, b) => Object.values(b[1]).reduce((x, y) => x + y, 0) - Object.values(a[1]).reduce((x, y) => x + y, 0)).map(([k, w]) => `<tr><td><b>${esc(k)}</b></td>${sem.map((s) => `<td>${w[s] || ""}</td>`).join("")}<td><b>${Object.values(w).reduce((x, y) => x + y, 0)}</b></td></tr>`).join("") || `<tr><td class="muted">Sem registros.</td></tr>`}</tbody></table></div></div>`;
+  const real = montar(({ e }) => isPrest(e), (x, e) => e.realizadoPor), sol = montar(() => true, (x) => x.veterinario);
+  v.innerHTML = `<div class="barra"><h2>Produção por médico</h2><input type="month" id="pdMes" value="${planMes}"><button class="btn" id="pdCsv">Exportar (Excel)</button><button class="btn" onclick="print()">Imprimir</button></div>
+    ${tabela("Exames de imagem / serviços realizados", real)}${tabela("Exames solicitados (por quem pediu)", sol)}`;
+  $("#pdMes").onchange = (e) => { planMes = e.target.value; render(); };
+  $("#pdCsv").onclick = () => { const rows = [["tipo", "profissional", "semana", "quantidade"]];
+    [["realizados", real], ["solicitados", sol]].forEach(([t, { m }]) => Object.entries(m).forEach(([k, w]) => Object.entries(w).forEach(([s, n]) => rows.push([t, k, fmtData(s), n]))));
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\ufeff" + rows.map((r) => r.join(";")).join("\n")], { type: "text/csv" })); a.download = `producao_${planMes}.csv`; a.click(); };
 }

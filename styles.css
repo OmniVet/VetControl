@@ -97,3 +97,23 @@ code{background:#eef5fd;padding:1px 4px;border-radius:4px;font-size:.8rem}
 .equiv-card{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--borda);border-radius:10px;padding:10px;background:#fff}
 .equiv-card.pref{border:2px solid var(--verde);background:#f3fbf6}.equiv-card .tag{margin:3px 0}
 .foto-letra{display:grid;place-items:center;background:#e3f0fc;color:var(--azul);font-weight:800;font-size:1.4rem}
+
+/* ===== Navegação por setores ===== */
+#menu{flex:0}#menu .btn-inicio{background:var(--azul);color:#fff;font-weight:700;padding:9px 16px;border-radius:10px}
+.ola{margin:6px 0 16px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:16px}
+.tile{aspect-ratio:1/1;background:#fff;border:1px solid var(--borda);border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:14px;
+  text-decoration:none;color:#1f2937;box-shadow:0 2px 8px #0d3c7812;transition:.15s;border-bottom:5px solid var(--azul)}
+.tile:hover{transform:translateY(-3px);box-shadow:0 10px 24px #1565c033;background:#f7fbff}
+.tile-ico{font-size:3.4rem;line-height:1}.tile b{font-size:1.05rem;color:#0d3c78}.tile-info{font-size:.8rem;color:var(--cinza);min-height:1.2em}
+.tiles-peq{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}.tiles-peq .tile{aspect-ratio:auto;padding:16px;border-bottom-color:#9fb3cf}.tiles-peq .tile-ico{font-size:2.2rem}
+.subnav{flex-direction:column;align-items:stretch;padding:12px 20px;gap:10px}
+.setor-titulo{font-size:1.3rem;font-weight:800;color:#0d3c78}
+.setor-abas{display:flex;flex-wrap:wrap;gap:8px}
+.setor-abas a{border:1px solid var(--borda);border-radius:10px;padding:10px 16px;background:#fff;font-weight:600;color:#374151;border-bottom-width:1px}
+.setor-abas a.ativo{background:var(--azul);color:#fff;border-color:var(--azul)}
+.grande-acao{text-align:center;padding:36px;max-width:640px;margin:20px auto}.btn.grande{font-size:1.1rem;padding:14px 28px}
+/* fotos grandes no estoque geral */
+#tb .foto{width:76px;height:76px;border-radius:12px}
+@media (max-width:600px){.tiles{grid-template-columns:repeat(2,1fr)}.tile-ico{font-size:2.6rem}}
+.topbar .user{margin-left:auto}

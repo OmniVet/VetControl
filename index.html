@@ -24,18 +24,8 @@
   <div id="app" class="hidden">
     <header class="topbar">
       <div class="logo">Vet<span>Control</span></div>
-      <nav id="menu">
-        <a href="#painel" data-sec="painel">Início</a>
-        <a href="#produtos" data-sec="estoque">1 · Estoque <span id="badgeAlerta" class="tag critico hidden"></span></a>
-        <a href="#planilha" data-sec="exames">2 · Exames</a>
-        <a href="#inventario" data-sec="inventario">3 · Inventário</a>
-        <a href="#solicitacoes" data-sec="pedidos">4 · Pedidos <span id="badgeSol" class="tag critico hidden"></span></a>
-        <a href="#relatorios" data-sec="relatorios">5 · Relatórios</a>
-        <a href="#orcamento" data-sec="orcamentos">6 · Orçamentos</a>
-        <a href="#vacinas" data-sec="vacinas">7 · Vacinas</a>
-        <a href="#ambulatorio" data-sec="ambulatorio">8 · Ambulatório</a>
-        <a href="#usuarios" data-sec="config" class="so-master">⚙️ Usuários</a>
-      </nav>
+      <nav id="menu"><a href="#painel" class="btn-inicio">🏠 Início</a>
+        <span class="hidden"><span id="badgeAlerta"></span><span id="badgeSol"></span></span></nav>
       <div class="user"><span id="userNome"></span> <button id="sair" class="btn small">Sair</button></div>
     </header>
     <div id="subnav" class="subnav"></div>
