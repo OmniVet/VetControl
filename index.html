@@ -56,6 +56,14 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
+  <div id="semConexao" class="login hidden"><div class="card login-card"><h1>Vet<span>Control</span></h1>
+    <p><b>Não foi possível abrir o sistema.</b></p><p class="muted small" id="semConexaoMsg">A conexão com o Firebase não respondeu. Verifique a internet e atualize a página (Ctrl + Shift + R). Se continuar, tente numa janela anônima.</p></div></div>
+  <script>
+    // Se o sistema não iniciar em 10 s (Firebase bloqueado, sem internet, erro de configuração), mostra um aviso em vez da tela em branco
+    window.addEventListener("error", (e) => { window.__erroVC = e.message; });
+    setTimeout(() => { if (!window.__vcPronto) { document.getElementById("semConexao").classList.remove("hidden");
+      if (window.__erroVC) document.getElementById("semConexaoMsg").textContent += " Detalhe: " + window.__erroVC; } }, 10000);
+  </script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

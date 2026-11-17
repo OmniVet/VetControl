@@ -115,6 +115,7 @@ $("#esqueci").onclick = async (e) => {
 $("#sair").onclick = () => signOut(auth);
 
 onAuthStateChanged(auth, async (u) => {
+  window.__vcPronto = true; $("#semConexao")?.classList.add("hidden");
   if (!u) { usuario = null; $("#app").classList.add("hidden"); $("#login").classList.remove("hidden"); return; }
   const ref = doc(db, "users", u.uid); let snap = await getDoc(ref);
   if (!snap.exists() && u.email.toLowerCase() === MASTER_EMAIL.toLowerCase()) {
