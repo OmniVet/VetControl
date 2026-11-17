@@ -1,4 +1,4 @@
-# EstoquePlus — colocar no ar, passo a passo
+# VetControl — colocar no ar, passo a passo
 
 Tempo: uns 30 minutos. Custo: zero (Firebase plano Spark + GitHub Pages).
 Você **não precisa criar nenhum documento ou tabela à mão no Firebase**: o próprio sistema cria tudo quando é usado. No Firebase, você só liga o login e o banco.

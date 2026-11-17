@@ -1,4 +1,4 @@
-# EstoquePlus
+# VetControl
 
 > **Para colocar no ar, siga o arquivo `PASSO_A_PASSO.md`.**
 

@@ -1,4 +1,4 @@
-# VetControl (EstoquePlus) — notas para o Claude
+# VetControl — notas para o Claude
 
 Sistema web estático (GitHub Pages) + Firebase (Auth e-mail/senha + Firestore). Sem build: HTML/JS puro com módulos ES, Firebase SDK 10.12.2 via gstatic CDN.
 Usuária: gestora de clínica veterinária, não programadora. Responder em português, linguagem simples.

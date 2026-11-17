@@ -102,5 +102,5 @@ export const VACINAS_COMERCIAIS = [
 
 export const DIAS_A_VENCER = 15;
 // Portal do tutor (login por CPF). Não precisa existir: é só o formato interno do login.
-export const DOMINIO_TUTOR = "tutor.estoqueplus.app";
+export const DOMINIO_TUTOR = "tutor.vetcontrol.app";
 export const TIPOS_AMBULATORIO = ["Check-up", "Exame", "Consulta", "Medicação", "Curativo", "Retorno"];
