@@ -156,6 +156,10 @@ Estoque → **🖼 Buscar fotos** usa a busca de imagens do Google (grátis, 100
 ### Ficha de reposição e relatório semanal
 Reposição por setor → **Ficha de reposição**: lista o ideal de cada item da sala, quanto há agora, quanto falta e uma coluna **Qtd. reposta**. **Registrar reposição** tira do estoque central e põe na sala (equipe comum fica pendente até a estoquista confirmar; controlados continuam exigindo o livro). Dá para imprimir a ficha em branco. **Relatório semanal de reposição** soma por item, setor e pessoa, compara com as 3 semanas anteriores e exporta CSV.
 
+### Busca inteligente de exames (Solicitação de exames → 1.3)
+Escolha os exames que o paciente precisa e o VetControl mostra as **6 combinações mais baratas** entre os laboratórios (perfis, painéis e avulsos), com o total, os exames extras que vêm junto e os **tubos de coleta** por laboratório. É possível ligar/desligar laboratórios. O botão **➡ Usar na solicitação** abre a Nova solicitação já com os exames, o laboratório e o valor de cada um e a coleta sugerida nas observações (falta só preencher paciente e tutor).
+- A listagem de preços fica em `dados-exames.js` (valor cobrado pela Vet Plus; laboratórios VETER, VETEX, LIAN, LAFORVET, LABMIL, IFVET). Para atualizar preços, substitua essa listagem. O cálculo fica em `busca-exames.js`.
+
 ## Importar a planilha da clínica
 O mesmo botão lê o `Controle_Estoque_e_Patrimonio.xlsx` no formato atual (uma aba por categoria: Hospitalar Humano, Veterinário, **Distribuidora Odontológica**, Especiais e Oncológicos, Limpeza e Escritório, Outros Custos, Instrumentais, Inventário e Compras Shopee).
 - Produtos que já existem (mesmo código ou nome) são ignorados: pode importar de novo quando a planilha crescer.

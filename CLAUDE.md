@@ -9,6 +9,7 @@ Usuária: gestora de clínica veterinária, não programadora. Responder em port
 - `firestore.rules`: regras de segurança. Deve ser colada manualmente pela usuária no console do Firebase sempre que mudar: AVISAR.
 - `tutor.html` + `tutor.js`: portal do tutor (login por CPF → e-mail interno `<cpf>.<versão>@DOMINIO_TUTOR`)
 - `cartao.js`: cartão de vacina (visual de cartão físico, etiquetas por tipo de vacina)
+- `dados-exames.js` (listagem de preços dos laboratórios) + `busca-exames.js` (menor preço e tubos)
 - `importar-planilha.js`: leitor da planilha Controle_Estoque_e_Patrimonio.xlsx (uma aba por categoria + aba opcional "Salas"). Aba de 31 letras no máx.: `NOME_ABA` mapeia "Medicamentos Especiais" → categoria completa
 
 ## Organização do app.js
@@ -18,6 +19,7 @@ Exame do LAB VETPLUS ou de imagem/prestador vai para "Liberar laudos" (`precisaL
 Vacinas (6), Ambulatório (7) e Orçamentos (8) vão virar um sistema próprio; continuam aqui em "Outros módulos" até lá.
 Helpers: `abrirModal(titulo, html, onSubmit, okTxt)`, `opts()`, `esc()`, `toast()`, `log()` (movimentos), `addLote/retirarFEFO`, `vencido()` (validade vale até o fim do mês), `docImpressao()` (A4/bobina).
 Sugestão de mínimo/ideal = `carregarSugestoes()` (movimentos dos últimos 90 dias, cache de 10 min). Ficha (`telaFicha`) e relatório semanal (`telaSemanal`) usam `darBaixa` / movimentos `reposicao`. Fotos automáticas: `buscarFotosAuto` (Google CSE, chaves no firebase-config).
+Busca inteligente de exames: `telaBuscaExames` (aba 1.3), dados em `dados-exames.js`, cálculo em `busca-exames.js`; "Usar na solicitação" guarda `preSolicitacao` e abre `telaNovaSolicitacao` → `modalExame` já preenchido. Sem coleção nova no Firestore.
 Perfis: master > estoquista (`podeConfirmar()`) > usuario (lançamentos viram pendências).
 
 ## Ao mudar
