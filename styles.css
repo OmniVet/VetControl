@@ -145,3 +145,6 @@ table.ficha input[type=number]{width:90px}
 .linha-ativ{display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #e3eaf5}.linha-ativ.feita{background:#eef8ee;color:#555}.linha-ativ .hora{min-width:90px;color:#0d47a1;font-weight:bold}
 .dias-chk{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}.dias-chk label{display:flex;align-items:center;gap:4px;font-weight:normal}
 .logo{display:flex;align-items:center;gap:8px}.logo-ico{height:34px;width:auto}.logo-login{display:block;max-width:260px;width:100%;margin:0 auto 6px}
+.cat-linha td{background:#e8f0fb;color:#0d47a1;padding-top:10px}
+.perg{border-bottom:1px solid #e3eaf5;padding:8px 0}.perg-t{display:flex;align-items:center;gap:8px;margin-bottom:4px}.sinais{margin-left:auto;display:flex;gap:4px}.perg textarea,.perg input{width:100%;margin-top:4px}
+.res-cat{max-height:230px;overflow:auto;margin-bottom:8px}.res-item{display:block;width:100%;text-align:left;background:#fff;border:1px solid #d5e0f0;border-radius:8px;padding:6px 10px;margin:3px 0;cursor:pointer}.res-item:hover{background:#eef5ff}.duas5{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:4px}.tubos div{margin-top:4px}.tubo-bol{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:middle}

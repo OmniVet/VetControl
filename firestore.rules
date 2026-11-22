@@ -10,6 +10,7 @@ service cloud.firestore {
     function temPerfil() { return logado() && exists(/databases/$(database)/documents/users/$(request.auth.uid)); }
     function ativo() { return temPerfil() && perfil().ativo == true; }
     function master() { return ativo() && perfil().role == "master"; }
+    function gerente() { return ativo() && perfil().cargo == "gerente"; }
     function estoquista() { return ativo() && perfil().role in ["master", "estoquista"]; }
 
     match /users/{uid} {
@@ -72,6 +73,11 @@ service cloud.firestore {
     match /catalogoExames/{id} {
       allow read: if ativo();
       allow write: if master();
+    }
+
+    // Valor pago ao laboratório (comparar com a cobrança do laboratório): só o master
+    match /catalogoCustos/{id} {
+      allow read, write: if master();
     }
 
     match /pendencias/{id} {
@@ -201,6 +207,11 @@ service cloud.firestore {
     match /timeConfig/{id} {
       allow read: if ativo();
       allow write: if master();
+    }
+
+    // Entrevistas de candidatos (dados pessoais): só master e gerente
+    match /entrevistas/{id} {
+      allow read, write: if master() || gerente();
     }
   }
 }
