@@ -4,6 +4,7 @@ import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateD
 import { cartaoHtml, CARTAO_CSS, rotulo } from "./cartao.js";
 import { MODELOS_LAUDO, CATEGORIAS_LAUDO } from "./modelos-laudo.js";
 import { iniciarTime } from "./time.js";
+import { iniciarEntrevista } from "./entrevista.js";
 import { CARGOS, CRITERIOS_AVALIACAO } from "./firebase-config.js";
 import { GRUPOS_MERCADO } from "./equivalencias-mercado.js";
 import { lerPlanilhaClinica, COLUNAS_MODELO, COLUNAS_SALAS, NOME_ABA } from "./importar-planilha.js";
@@ -109,6 +110,9 @@ const opts = (arr, sel) => arr.map((o) => { const v = typeof o === "string" ? o 
 
 const TIME = iniciarTime({ db, fb: { collection, doc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, serverTimestamp }, $, esc, toast: (t) => toast(t), abrirModal, opts, hoje, eu: () => usuario, isMaster: () => isMaster(), docImpressao: (...a) => docImpressao(...a), sha256: (t) => sha256(t), entrarComSenha: (e, s) => signInWithEmailAndPassword(auth, e, s), CRITERIOS: CRITERIOS_AVALIACAO, cltDe: (u) => !!CARGOS.find((x) => x.id === u.cargo)?.clt, CLINICA_NOME: CLINICA.nome });
 
+const podeEntrevista = () => isMaster() || usuario?.cargo === "gerente";
+const ENTREVISTA = iniciarEntrevista({ db, fb: { collection, doc, getDocs, addDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp }, $, esc, toast: (t) => toast(t), abrirModal, opts, eu: () => usuario, podeAcessar: () => podeEntrevista(), docImpressao: (...x) => docImpressao(...x), comprimirImagem: (...x) => comprimirImagem(...x), CLINICA_NOME: CLINICA.nome });
+
 /* ================= AUTENTICAÇÃO ================= */
 $("#loginForm").onsubmit = async (e) => {
   e.preventDefault(); const f = new FormData(e.target);
@@ -185,12 +189,14 @@ const SETORES = [
   { id: "time-agenda", mod: "time", n: "", titulo: "Agenda de atividades do time", icone: "📋", abas: [["time-agenda", "Agenda de atividades"]] },
   { id: "time-relatorios", mod: "time", n: "", titulo: "Relatórios e histórico do time", icone: "📑", abas: [["time-relatorios", "Relatórios, avaliações e assinaturas"]] },
   { id: "time-presenca", mod: "time", n: "", titulo: "Presença do time", icone: "⏱", abas: [["time-presenca", "Registro e espelho de presença"]] },
+  { id: "entrevista", mod: "entrevista", n: "", titulo: "Entrevistas", icone: "🗣️", entrevista: true, abas: [["entrevista", "Entrevistas por tipo de vaga"]] },
 ];
 const MODULOS = [
   { id: "exames", titulo: "Módulo Exames", sub: "Exames, Laudos e Histórico de Exames", icone: "🧪" },
   { id: "estoque", titulo: "Módulo Estoque e Compras", sub: "Estoque, Inventário, Compras e Reposição por setor", icone: "📦" },
   { id: "ambul", titulo: "Módulo Ambulatorial e Recepção", sub: "Vacinação, Ambulatorial e Orçamentos", icone: "🩺" },
   { id: "time", titulo: "Módulo Nosso time", sub: "Agenda de atividades, relatórios/avaliações e presença", icone: "👥" },
+  { id: "entrevista", titulo: "Módulo Entrevista", sub: "Seleção de candidatos (só Master e Gerente)", icone: "🗣️" },
   { id: "geral", titulo: "Geral", sub: "Relatórios gerais e configurações", icone: "⚙️" }
 ];
 async function render() {
@@ -202,7 +208,7 @@ async function render() {
   atualizarBadge();
   const v = $("#view"); v.innerHTML = `<p class="muted">Carregando…</p>`;
   const telas = { "nova-solicitacao": telaNovaSolicitacao, "busca-exames": telaBuscaExames, "laudos-pendentes": telaLaudosPendentes, "laudos-liberados": telaLaudosLiberados, producao: telaProducao, "exportar-exames": (v) => telaRelatorios(v, "exames"),
-    ...TIME, equivalentes: telaEquivalentes, vencimentos: telaVencimentos, vacinas: telaVacinas, pets: telaPets, ambulatorio: telaAmbulatorio, orcamento: telaOrcamento, orcamentos: telaOrcamentos, servicos: telaServicos, pacotes: telaPacotes, prestadores: (v) => telaPlanilha(v, "prest"), comparativo: telaComparativo, modelos: telaModelos, limbo: telaLimbo, pendencias: telaPendencias, planilha: telaPlanilha, catalogo: telaCatalogo, painel: telaPainel, alertas: telaAlertas, profissionais: telaProfissionais, cotacao: telaCotacao, inventario: telaInventario, nfe: telaNfe, solicitacoes: telaSolicitacoes, exames: telaExames, produtos: telaProdutos, salas: telaSalas, ficha: telaFicha, semanal: telaSemanal, pedido: telaPedido, relatorios: telaRelatorios, fornecedores: telaFornecedores, usuarios: telaUsuarios };
+    ...TIME, ...ENTREVISTA, equivalentes: telaEquivalentes, vencimentos: telaVencimentos, vacinas: telaVacinas, pets: telaPets, ambulatorio: telaAmbulatorio, orcamento: telaOrcamento, orcamentos: telaOrcamentos, servicos: telaServicos, pacotes: telaPacotes, prestadores: (v) => telaPlanilha(v, "prest"), comparativo: telaComparativo, modelos: telaModelos, limbo: telaLimbo, pendencias: telaPendencias, planilha: telaPlanilha, catalogo: telaCatalogo, painel: telaPainel, alertas: telaAlertas, profissionais: telaProfissionais, cotacao: telaCotacao, inventario: telaInventario, nfe: telaNfe, solicitacoes: telaSolicitacoes, exames: telaExames, produtos: telaProdutos, salas: telaSalas, ficha: telaFicha, semanal: telaSemanal, pedido: telaPedido, relatorios: telaRelatorios, fornecedores: telaFornecedores, usuarios: telaUsuarios };
   try { await (telas[rota] || telaPainel)(v); } catch (e) { v.innerHTML = `<p class="erro">Erro: ${esc(e.message)}</p>`; console.error(e); }
   window.scrollTo(0, 0);
 }
@@ -1132,7 +1138,7 @@ async function telaAlertas(v) {
 
 /* ================= INÍCIO (5 PAINÉIS) ================= */
 async function telaPainel(v) {
-  const vis = SETORES.filter((x) => !x.master || isMaster());
+  const vis = SETORES.filter((x) => (!x.master || isMaster()) && (!x.entrevista || podeEntrevista()));
   const tile = (x) => `<a class="tile" href="#${x.abas[0][0]}"><span class="tile-ico">${x.icone}</span><b>${x.n ? x.n + " · " : ""}${esc(x.titulo)}</b><span class="tile-info" id="info-${x.id}"></span></a>`;
   v.innerHTML = `<h2 class="ola">Olá, ${esc(usuario.nome)} 👋</h2>
     ${MODULOS.map((m) => { const itens = vis.filter((x) => x.mod === m.id); return itens.length ? `<section class="modulo"><h3 class="modulo-tit"><span>${m.icone}</span> ${esc(m.titulo)} <small>${esc(m.sub)}</small></h3><div class="tiles">${itens.map(tile).join("")}</div></section>` : ""; }).join("")}`;
