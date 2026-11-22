@@ -551,14 +551,15 @@ async function baixarModeloPlanilha() {
     ["• Validade no formato DD/MM/AAAA. Mesmo produto com validade diferente = uma linha para cada."],
     ["• Estoque mínimo: quando a quantidade chega nele, aparece REPOR. Estoque ideal é opcional (vazio = o dobro do mínimo)."],
     [`• Depois de alguns dias de uso, o VetControl sugere o mínimo e o ideal certos pelas saídas dos últimos ${DIAS_ANALISE} dias.`],
-    ["• Aba \"Salas\": o que cada setor deve ter. A coluna Sala deve ser igual a uma destas:"], ...SALAS.map((x) => ["      - " + x.nome])];
+    ["• Aba \"Salas\": o que cada setor deve ter. Se o produto ainda não existe no cadastro, ele é criado (saldo zero) com a Categoria e a Unidade da linha. \"Evitar comprar\" nas Observações marca o produto como não comprar."],
+    ["• Na aba \"Salas\", a coluna Sala deve ser igual a uma destas:"], ...SALAS.map((x) => ["      - " + x.nome])];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(leia), "LEIA-ME");
   const exemplo = ["EX001", "Insumo", "Cateter", "Cateter intravenoso 22G azul", "", "", "BD", "Unidade", "22G", "", "un", 10, 5, 10, "", "", "Armário 1", "EXEMPLO – apague esta linha"];
   for (const cat of DISTRIBUIDORAS) {
     const ws = XLSX.utils.aoa_to_sheet([COLUNAS_MODELO, exemplo]); ws["!cols"] = COLUNAS_MODELO.map((c) => ({ wch: Math.max(14, c.length + 2) })); ws["!cols"][3] = { wch: 40 };
     XLSX.utils.book_append_sheet(wb, ws, NOME_ABA[cat] || cat);
   }
-  const wsS = XLSX.utils.aoa_to_sheet([COLUNAS_SALAS, [SALAS[0].nome, "EX001", "Cateter intravenoso 22G azul", 10, 3, "EXEMPLO – apague esta linha"]]); wsS["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 40 }, { wch: 14 }, { wch: 24 }, { wch: 28 }];
+  const wsS = XLSX.utils.aoa_to_sheet([COLUNAS_SALAS, [SALAS[0].nome, "EX001", "Cateter intravenoso 22G azul", 10, 3, "Hospitalar Humano", "Unidade", "", "EXEMPLO – apague esta linha"]]); wsS["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 44 }, { wch: 14 }, { wch: 24 }, { wch: 22 }, { wch: 12 }, { wch: 12 }, { wch: 40 }];
   XLSX.utils.book_append_sheet(wb, wsS, "Salas");
   XLSX.writeFile(wb, "Modelo_Estoque_VetControl.xlsx");
 }
@@ -2462,10 +2463,16 @@ async function gravarPlanilha(r) {
   for (const x of r.inventario) await addDoc(collection(db, "inventario"), { ...x, status: "Ativo", criadoPor: usuario.nome, criadoEm: serverTimestamp() });
   for (const c of r.compras) await addDoc(collection(db, "listaCompras"), { ...c, criadoEm: serverTimestamp() });
   // Aba "Salas": cria/atualiza o ideal e o crítico de cada item em cada sala (nunca mexe nas quantidades já contadas)
-  let nSalas = 0; const semSala = [];
+  let nSalas = 0, criados = 0; const semSala = [];
   for (const x of r.salas) {
     const sala = SALAS.find((z) => z.id === x.sala || norm(z.nome) === norm(x.sala) || (norm(x.sala) && norm(z.nome).includes(norm(x.sala))));
-    const pid = idPorCodigo[x.codigo] || idPorNome[norm(x.produto)], pd = dadosPorId[pid];
+    let pid = (x.codigo && idPorCodigo[x.codigo]) || idPorNome[norm(x.produto)], pd = dadosPorId[pid];
+    if (!pd && sala && x.produto) { // item do setor que ainda não está no cadastro: cria o produto (saldo zero) para já entrar na ficha
+      pd = { codigo: x.codigo, nome: x.produto, categoria: x.categoria, subcategoria: "", tipoItem: "", principio: "", especie: "", marca: "", medida: x.medida, concentracao: "", conteudo: "", localizacao: "", obs: x.obs,
+        controlado: x.controlado, controladoAuto: x.controlado, minimo: 0, ideal: 0, tipo: "estoque", valorUnit: 0, naoComprar: x.naoComprar };
+      pid = (await addDoc(collection(db, "produtos"), { ...pd, fotoUrl: "", lotesEstoque: [], lotesLimbo: [], criadoEm: serverTimestamp() })).id;
+      idPorNome[norm(pd.nome)] = pid; if (pd.codigo) idPorCodigo[pd.codigo] = pid; dadosPorId[pid] = pd; criados++;
+    }
     if (!sala || !pd) { semSala.push(`${x.sala || "?"} / ${x.codigo || x.produto}`); continue; }
     const ref = doc(db, "salas", sala.id, "itens", pid);
     if ((await getDoc(ref)).exists()) await updateDoc(ref, { ideal: x.ideal, critico: x.critico });
@@ -2473,7 +2480,7 @@ async function gravarPlanilha(r) {
     nSalas++;
   }
   window.__plan = null;
-  toast(`Importado: ${r.novos.length} produtos, ${r.grupos.length} grupos de equivalentes${r.salas.length ? `, ${nSalas} itens de sala${semSala.length ? ` (${semSala.length} não encontrados: ${semSala.slice(0, 3).join("; ")}…)` : ""}` : ""}.`);
+  toast(`Importado: ${r.novos.length} produtos, ${r.grupos.length} grupos de equivalentes${r.salas.length ? `, ${nSalas} itens de sala${criados ? ` (${criados} produtos novos criados com saldo zero)` : ""}${semSala.length ? ` (${semSala.length} não encontrados: ${semSala.slice(0, 3).join("; ")}…)` : ""}` : ""}.`);
 }
 
 /* ================= MEDICAMENTOS EQUIVALENTES ================= */
