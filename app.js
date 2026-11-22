@@ -2,6 +2,7 @@ import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, orderBy, runTransaction, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { cartaoHtml, CARTAO_CSS, rotulo } from "./cartao.js";
+import { GRUPOS_MERCADO } from "./equivalencias-mercado.js";
 import { lerPlanilhaClinica, COLUNAS_MODELO, COLUNAS_SALAS, NOME_ABA } from "./importar-planilha.js";
 import { DADOS_EXAMES } from "./dados-exames.js";
 import { resolverCombinacoes, calcularTubos, textoTubos, TUBOS } from "./busca-exames.js";
@@ -206,7 +207,7 @@ async function telaProdutos(v) {
   <div class="tabela-wrap"><table><thead><tr><th></th><th>Produto</th><th>Distribuidora</th><th>Medida</th><th>Tipo</th><th>No estoque / validade</th><th>Ideal</th><th>Mín.</th><th>Sugestão (últimos ${DIAS_ANALISE} dias)</th><th>Status</th><th>Ações</th></tr></thead><tbody id="tb"></tbody></table></div>`;
   const desenhar = () => {
     const b = $("#busca").value.toLowerCase(), c = $("#fCat").value;
-    $("#tb").innerHTML = produtos.filter((p) => (!b || `${p.nome} ${p.marca || ""} ${p.principio || ""} ${p.codigo || ""} ${p.subcategoria || ""}`.toLowerCase().includes(b)) && (!c || p.categoria === c)).map((p) => `
+    $("#tb").innerHTML = produtos.filter((p) => (!b || `${p.nome} ${p.marca || ""} ${p.principio || ""} ${p.codigo || ""} ${p.subcategoria || ""} ${textoEquiv(p)}`.toLowerCase().includes(b)) && (!c || p.categoria === c)).map((p) => `
       <tr><td>${fotoTag(p)}</td>
       <td><b>${esc(p.nome)}</b>${p.controlado ? ` <span class="tag critico">🔒 Controlado</span>` : ""}${p.naoComprar ? ` <span class="tag critico" title="${esc(p.naoComprarMotivo || "")}">🚫 Não comprar</span>` : ""}<div class="muted small">${esc([p.codigo, p.principio, p.marca, p.subcategoria].filter(Boolean).join(" · "))}</div>${p.naoComprar && p.naoComprarMotivo ? `<div class="small" style="color:var(--vermelho)">${esc(p.naoComprarMotivo)}</div>` : ""}${equivResumo(p)}</td>
       <td>${esc(p.categoria)}</td><td>${esc(p.medida)}</td>
@@ -559,7 +560,7 @@ async function baixarModeloPlanilha() {
     const ws = XLSX.utils.aoa_to_sheet([COLUNAS_MODELO, exemplo]); ws["!cols"] = COLUNAS_MODELO.map((c) => ({ wch: Math.max(14, c.length + 2) })); ws["!cols"][3] = { wch: 40 };
     XLSX.utils.book_append_sheet(wb, ws, NOME_ABA[cat] || cat);
   }
-  const wsS = XLSX.utils.aoa_to_sheet([COLUNAS_SALAS, [SALAS[0].nome, "EX001", "Cateter intravenoso 22G azul", 10, 3, "Hospitalar Humano", "Unidade", "", "EXEMPLO – apague esta linha"]]); wsS["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 44 }, { wch: 14 }, { wch: 24 }, { wch: 22 }, { wch: 12 }, { wch: 12 }, { wch: 40 }];
+  const wsS = XLSX.utils.aoa_to_sheet([COLUNAS_SALAS, [SALAS[0].nome, "EX001", "Cateter intravenoso 22G azul", 10, 3, "Hospitalar Humano", "Unidade", "", "EXEMPLO – apague esta linha", 6]]); wsS["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 44 }, { wch: 14 }, { wch: 24 }, { wch: 22 }, { wch: 12 }, { wch: 12 }, { wch: 40 }, { wch: 18 }];
   XLSX.utils.book_append_sheet(wb, wsS, "Salas");
   XLSX.writeFile(wb, "Modelo_Estoque_VetControl.xlsx");
 }
@@ -2476,7 +2477,7 @@ async function gravarPlanilha(r) {
     if (!sala || !pd) { semSala.push(`${x.sala || "?"} / ${x.codigo || x.produto}`); continue; }
     const ref = doc(db, "salas", sala.id, "itens", pid);
     if ((await getDoc(ref)).exists()) await updateDoc(ref, { ideal: x.ideal, critico: x.critico });
-    else await setDoc(ref, { nome: pd.nome, medida: pd.medida, controlado: !!pd.controlado, lotes: [], ideal: x.ideal, critico: x.critico });
+    else await setDoc(ref, { nome: pd.nome, medida: pd.medida, controlado: !!pd.controlado, lotes: x.atual > 0 ? [{ qtd: x.atual, validade: "" }] : [], ideal: x.ideal, critico: x.critico });
     nSalas++;
   }
   window.__plan = null;
@@ -2487,13 +2488,21 @@ async function gravarPlanilha(r) {
 // grupo: { principio, forma, concentracao, semEquivalente, obs, itens: [{ nome, fabricante, concentracao, relacao: "identico"|"ressalva", ressalva, produtoId, fotoUrl, preferencial }] }
 let equivalencias = [];
 async function carregarEquivalencias() { equivalencias = (await getDocs(query(collection(db, "equivalencias"), orderBy("principio")))).docs.map((d) => ({ id: d.id, ...d.data() })); return equivalencias; }
-const grupoDoProduto = (p) => equivalencias.find((g) => g.itens.some((i) => i.produtoId === p.id || norm(i.nome) === norm(p.nome)));
+const casaTermo = (g, texto) => (g.termos || []).some((t) => (" " + norm(texto) + " ").includes(" " + norm(t) + " ") || norm(texto).startsWith(norm(t)));
+const grupoDoProduto = (p) => equivalencias.find((g) => g.itens.some((i) => i.produtoId === p.id || norm(i.nome) === norm(p.nome))) || equivalencias.find((g) => casaTermo(g, p.nome));
+const textoEquiv = (p) => { const g = grupoDoProduto(p); return g ? g.itens.map((i) => i.nome).join(" ") + " " + (g.termos || []).join(" ") : ""; }; // busca por nome comercial equivalente
+async function semearEquivalenciasMercado() { // cria os grupos de mercado que ainda não existem (não duplica)
+  await carregarEquivalencias(); let n = 0;
+  for (const g of GRUPOS_MERCADO) { if (equivalencias.some((e) => norm(e.principio) === norm(g.principio))) continue;
+    await addDoc(collection(db, "equivalencias"), { ...g, itens: g.itens.map((i) => ({ ...i, produtoId: produtos.find((p) => parecido(p.nome, i.nome))?.id || "" })), semEquivalente: false, criadoPor: usuario.nome, criadoEm: serverTimestamp() }); n++; }
+  await carregarEquivalencias(); return n;
+}
 const estoqueDe = (i) => { const p = produtos.find((x) => x.id === i.produtoId); return p ? total(p.lotesEstoque) : null; };
 const fotoItem = (i) => { const p = produtos.find((x) => x.id === i.produtoId); return p && fotoSrc(p) ? fotoTag(p) : i.fotoUrl ? `<img class="foto" src="${esc(i.fotoUrl)}">` : `<div class="foto foto-letra">${esc((i.nome || "?")[0])}</div>`; };
 function equivResumo(p) {
   const g = grupoDoProduto(p); if (!g) return "";
   if (g.semEquivalente) return `<div class="small equiv" data-eq="${g.id}">🚫 Sem equivalente — ${esc(g.obs || "o veterinário define outra opção")}</div>`;
-  const outros = g.itens.filter((i) => i.produtoId !== p.id && norm(i.nome) !== norm(p.nome));
+  const outros = g.itens.filter((i) => i.produtoId !== p.id && norm(i.nome) !== norm(p.nome) && !casaTermo({ termos: [i.nome] }, p.nome));
   const zerado = total(p.lotesEstoque) <= 0;
   return `<div class="small equiv ${zerado ? "falta" : ""}" data-eq="${g.id}">${zerado ? "⚠️ Sem estoque → usar: " : "🔁 Igual a: "}${outros.map((i) => `${i.relacao === "ressalva" ? "⚠" : "="} ${esc(i.nome)}${estoqueDe(i) != null ? ` (${estoqueDe(i)})` : ""}`).join(" · ")}</div>`;
 }
@@ -2516,16 +2525,17 @@ async function telaEquivalentes(v) {
   await Promise.all([carregarProdutos(), carregarEquivalencias()]);
   let busca = "";
   v.innerHTML = `<div class="barra"><h2>Medicamentos equivalentes</h2><input id="eqB" placeholder="Buscar princípio ativo ou nome comercial…">
-    ${podeConfirmar() && !equivalencias.length ? `<button class="btn" id="eqSeed">Carregar exemplos da clínica</button>` : ""}${podeConfirmar() ? `<button class="btn primary" id="eqNovo">+ Novo grupo</button>` : ""}</div>
+    ${podeConfirmar() && !equivalencias.length ? `<button class="btn" id="eqSeed">Carregar exemplos da clínica</button>` : ""}${podeConfirmar() ? `<button class="btn" id="eqMercado">Carregar equivalentes de mercado (fios e dexametasona)</button>` : ""}${podeConfirmar() ? `<button class="btn primary" id="eqNovo">+ Novo grupo</button>` : ""}</div>
   <p class="muted small"><b>=</b> idêntico (mesmo princípio ativo e mesma concentração: pode trocar direto) · <b>⚠</b> substituto com ressalva (outra concentração ou formulação: confirmar com o veterinário e recalcular a dose) · <b>⭐</b> o que a clínica usa como principal.</p>
   <div id="eqLista"></div>`;
   const des = () => { const b = norm(busca);
-    $("#eqLista").innerHTML = equivalencias.filter((g) => !b || norm(g.principio + " " + g.itens.map((i) => i.nome).join(" ")).includes(b)).map((g) => `<div class="card" style="margin-bottom:12px">
+    $("#eqLista").innerHTML = equivalencias.filter((g) => !b || norm(g.principio + " " + g.itens.map((i) => i.nome).join(" ") + " " + (g.termos || []).join(" ")).includes(b)).map((g) => `<div class="card" style="margin-bottom:12px">
       <div class="barra" style="margin:0"><h3 style="margin:0;flex:1">${esc(g.principio)} <span class="muted small">${esc(g.concentracao || "")} · ${esc(g.forma || "")}</span></h3>${podeConfirmar() ? `<button class="btn small" data-e="${g.id}">Editar</button>` : ""}</div>${grupoHtml(g)}</div>`).join("")
       || `<p class="muted">Nenhum grupo cadastrado.</p>`; };
   des(); $("#eqB").oninput = (e) => { busca = e.target.value; des(); };
   $("#eqNovo") && ($("#eqNovo").onclick = () => modalGrupoEquiv());
   $("#eqLista").onclick = (e) => { const b = e.target.closest("[data-e]"); if (b) modalGrupoEquiv(equivalencias.find((g) => g.id === b.dataset.e)); };
+  $("#eqMercado") && ($("#eqMercado").onclick = async () => { const n = await semearEquivalenciasMercado(); toast(n ? `${n} grupos de mercado carregados. Confira e ligue ao estoque.` : "Os grupos de mercado já estavam carregados."); render(); });
   $("#eqSeed") && ($("#eqSeed").onclick = async () => {
     const I = (nome, fabricante, concentracao, relacao, extra = {}) => ({ nome, fabricante, concentracao, relacao, ressalva: "", produtoId: produtos.find((p) => parecido(p.nome, nome))?.id || "", fotoUrl: "", preferencial: false, ...extra });
     const grupos = [

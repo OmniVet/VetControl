@@ -25,3 +25,5 @@ Perfis: master > estoquista (`podeConfirmar()`) > usuario (lançamentos viram pe
 ## Ao mudar
 - Rodar `node --check` copiando o arquivo para .mjs.
 - Se criar coleção nova no Firestore, acrescentar a regra em `firestore.rules` e avisar a usuária para publicar de novo.
+
+- `equivalencias-mercado.js`: grupos prontos (fios absorvíveis por tipo, dexametasona) com `termos` que ligam produtos do estoque; botão em Equivalentes. Salas novas: instrumental, limpeza_material. Aba Salas tem coluna "Qtd. atual na sala".

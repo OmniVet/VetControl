@@ -30,6 +30,8 @@ export const SALAS = [
   { id: "imagem", nome: "Sala de Imagem" },
   { id: "internamento", nome: "Internamento" },
   { id: "centro_cirurgico", nome: "Centro Cirúrgico" },
+  { id: "instrumental", nome: "Sala de Instrumental Cirúrgico" },
+  { id: "limpeza_material", nome: "Sala de Limpeza de Material" },
   { id: "geladeira_vacina", nome: "Geladeira de Vacina" },
   { id: "geladeira_especiais", nome: "Geladeira de Medicamentos Especiais (quimioterápicos)" }
 ];

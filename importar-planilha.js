@@ -3,7 +3,7 @@
 const ABAS_PRODUTO = ["Hospitalar Humano", "Veterinário", "Distribuidora Odontológica", "Especiais e Oncológicos", "Distribuidora de Medicamentos Especiais", "Limpeza e Escritório", "Outros Custos"];
 const ABAS_OPCIONAIS = ["Distribuidora de Medicamentos Especiais"]; // só avisa se faltar nas demais
 export const COLUNAS_MODELO = ["Código", "Tipo", "Subcategoria", "Nome comercial", "Princípio ativo", "Espécie indicada", "Marca / Fabricante", "Apresentação", "Concentração / Calibre", "Volume / Conteúdo", "Unidade", "Qtd. em estoque", "Estoque mínimo", "Estoque ideal", "Validade", "Lote (opcional)", "Localização", "Observações"];
-export const COLUNAS_SALAS = ["Sala", "Código", "Produto", "Ideal na sala", "Crítico (repor quando ≤)", "Categoria", "Unidade", "Controlado", "Observações"];
+export const COLUNAS_SALAS = ["Sala", "Código", "Produto", "Ideal na sala", "Crítico (repor quando ≤)", "Categoria", "Unidade", "Controlado", "Observações", "Qtd. atual na sala"];
 // O Excel limita o nome da aba a 31 letras: "Medicamentos Especiais" vale como "Distribuidora de Medicamentos Especiais".
 export const NOME_ABA = { "Distribuidora de Medicamentos Especiais": "Medicamentos Especiais" };
 const MEDIDA = { unidade: "Unidade", un: "Unidade", ampola: "Ampola", rolo: "Rolo", pacote: "Pacote", "frasco-ampola": "Frasco-ampola", frasco: "Frasco", caixa: "Caixa", cx: "Caixa",
@@ -27,7 +27,7 @@ export function lerPlanilhaClinica(abas) {
   const produtos = [], inventario = [], avisos = [];
   // Aba "Salas" (modelo do VetControl): o que cada sala/setor deve ter. Sala | Código | Produto | Ideal na sala | Crítico
   const salas = objetos(abas["Salas"] || []).filter((r) => !ehExemplo(r["Observações"]) && (txt(r["Código"]) || txt(r["Produto"]))).map((r) => ({
-    sala: txt(r["Sala"]), codigo: txt(r["Código"]), produto: txt(r["Produto"]), ideal: numero(r["Ideal na sala"]) || 0, critico: numero(r["Crítico (repor quando ≤)"]) || 0,
+    sala: txt(r["Sala"]), codigo: txt(r["Código"]), produto: txt(r["Produto"]), ideal: numero(r["Ideal na sala"]) || 0, critico: numero(r["Crítico (repor quando ≤)"]) || 0, atual: numero(r["Qtd. atual na sala"]) || 0,
     // Só usados quando o produto ainda não existe no cadastro (ele é criado com saldo zero)
     categoria: ABAS_PRODUTO.find((a) => semAcento(a) === semAcento(r["Categoria"])) || "Hospitalar Humano", medida: MEDIDA[semAcento(r["Unidade"])] || "Unidade",
     controlado: /^s/i.test(txt(r["Controlado"])) || CONTROLADOS.test(txt(r["Produto"])), obs: txt(r["Observações"]), naoComprar: /evitar comprar|n[aã]o comprar/i.test(txt(r["Observações"])) }));
