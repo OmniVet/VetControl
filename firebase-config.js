@@ -121,3 +121,12 @@ export const TIPOS_AMBULATORIO = ["Check-up", "Exame", "Consulta", "Medicação"
 
 // Critérios da avaliação do time (notas de 1 a 5). A confirmar/editar pela gestão.
 export const CRITERIOS_AVALIACAO = ["Cumprimento da rotina", "Qualidade do trabalho", "Pontualidade e presença", "Trabalho em equipe", "Comunicação e atendimento", "Iniciativa e organização"];
+
+// Cargos. "clt: true" = entra na presença (ponto) e nas avaliações do time. Médicos veterinários são sempre PJ: ficam de fora.
+export const CARGOS = [
+  { id: "medico", nome: "Médico(a) veterinário(a) (PJ)", clt: false },
+  { id: "auxiliar", nome: "Auxiliar", clt: true },
+  { id: "gerente", nome: "Gerente", clt: true },
+  { id: "recepcao", nome: "Recepção", clt: true },
+  { id: "assistente", nome: "Assistente operacional", clt: true }
+];

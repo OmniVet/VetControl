@@ -3,7 +3,7 @@ import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, creat
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, orderBy, runTransaction, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { cartaoHtml, CARTAO_CSS, rotulo } from "./cartao.js";
 import { iniciarTime } from "./time.js";
-import { CRITERIOS_AVALIACAO } from "./firebase-config.js";
+import { CARGOS, CRITERIOS_AVALIACAO } from "./firebase-config.js";
 import { GRUPOS_MERCADO } from "./equivalencias-mercado.js";
 import { lerPlanilhaClinica, COLUNAS_MODELO, COLUNAS_SALAS, NOME_ABA } from "./importar-planilha.js";
 import { DADOS_EXAMES } from "./dados-exames.js";
@@ -106,7 +106,7 @@ function fecharModal() { $("#modal").classList.add("hidden"); }
 $("#modalCancelar").onclick = fecharModal;
 const opts = (arr, sel) => arr.map((o) => { const v = typeof o === "string" ? o : o.id, t = typeof o === "string" ? o : o.nome; return `<option value="${esc(v)}" ${v === sel ? "selected" : ""}>${esc(t)}</option>`; }).join("");
 
-const TIME = iniciarTime({ db, fb: { collection, doc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, serverTimestamp }, $, esc, toast: (t) => toast(t), abrirModal, opts, hoje, eu: () => usuario, isMaster: () => isMaster(), docImpressao: (...a) => docImpressao(...a), sha256: (t) => sha256(t), entrarComSenha: (e, s) => signInWithEmailAndPassword(auth, e, s), CRITERIOS: CRITERIOS_AVALIACAO, CLINICA_NOME: CLINICA.nome });
+const TIME = iniciarTime({ db, fb: { collection, doc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, serverTimestamp }, $, esc, toast: (t) => toast(t), abrirModal, opts, hoje, eu: () => usuario, isMaster: () => isMaster(), docImpressao: (...a) => docImpressao(...a), sha256: (t) => sha256(t), entrarComSenha: (e, s) => signInWithEmailAndPassword(auth, e, s), CRITERIOS: CRITERIOS_AVALIACAO, cltDe: (u) => !!CARGOS.find((x) => x.id === u.cargo)?.clt, CLINICA_NOME: CLINICA.nome });
 
 /* ================= AUTENTICAÇÃO ================= */
 $("#loginForm").onsubmit = async (e) => {
@@ -761,8 +761,8 @@ async function telaUsuarios(v) {
   if (!isMaster()) return (v.innerHTML = "<p>Acesso restrito ao master.</p>");
   const us = (await getDocs(collection(db, "users"))).docs.map((d) => ({ id: d.id, ...d.data() }));
   v.innerHTML = `<div class="barra"><h2>Usuários</h2><button class="btn primary" id="novoU">+ Novo usuário</button></div>
-  <table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Situação</th><th></th></tr></thead><tbody>
-  ${us.map((u) => `<tr><td>${esc(u.nome)}</td><td>${esc(u.email)}</td><td>${u.role}</td><td>${u.ativo ? `<span class="tag ok">Ativo</span>` : `<span class="tag critico">Bloqueado</span>`}</td>
+  <table><thead><tr><th>Nome</th><th>E-mail</th><th>Cargo</th><th>Perfil</th><th>Situação</th><th></th></tr></thead><tbody>
+  ${us.map((u) => `<tr><td>${esc(u.nome)}</td><td>${esc(u.email)}</td><td><select data-cg="${u.id}" class="small"><option value="">— definir —</option>${opts(CARGOS, u.cargo)}</select></td><td>${u.role}</td><td>${u.ativo ? `<span class="tag ok">Ativo</span>` : `<span class="tag critico">Bloqueado</span>`}</td>
     <td class="acoes-linha">${u.id !== usuario.uid ? `<button class="btn small" data-t="${u.id}">${u.ativo ? "Bloquear" : "Ativar"}</button>
     <select data-r="${u.id}" class="small">${opts(["usuario", "estoquista", "master"], u.role)}</select>` : "<span class='muted small'>você</span>"}
     <button class="btn small" data-s="${esc(u.email)}">Enviar redefinição de senha</button></td></tr>`).join("")}
@@ -771,13 +771,14 @@ async function telaUsuarios(v) {
     <label>Nome<input name="nome" required></label>
     <label>E-mail<input type="email" name="email" required></label>
     <label>Senha inicial (mín. 6 caracteres)<input name="senha" required minlength="6"></label>
+    <label>Cargo<select name="cargo"><option value="">— definir depois —</option>${opts(CARGOS)}</select></label>
     <label>Perfil<select name="role"><option value="usuario">Usuário (lançamentos ficam pendentes)</option><option value="estoquista">Estoquista (confirma entradas e retiradas)</option><option value="master">Master</option></select></label>`,
     async (f) => {
       // App secundário: cria o login sem deslogar o master
       const sec = initializeApp(firebaseConfig, "sec" + Date.now());
       try {
         const cred = await createUserWithEmailAndPassword(getAuth(sec), f.email, f.senha);
-        await setDoc(doc(db, "users", cred.user.uid), { nome: f.nome, email: f.email, role: f.role, ativo: true, criadoEm: serverTimestamp() });
+        await setDoc(doc(db, "users", cred.user.uid), { nome: f.nome, email: f.email, role: f.role, cargo: f.cargo, ativo: true, criadoEm: serverTimestamp() });
         await signOut(getAuth(sec));
       } catch (e) { throw new Error(e.code === "auth/email-already-in-use" ? "Este e-mail já está cadastrado." : e.message); }
       finally { await deleteApp(sec); }
@@ -786,6 +787,7 @@ async function telaUsuarios(v) {
   const u = (id) => us.find((x) => x.id === id);
   v.querySelectorAll("[data-t]").forEach((b) => (b.onclick = async () => { await updateDoc(doc(db, "users", b.dataset.t), { ativo: !u(b.dataset.t).ativo }); render(); }));
   v.querySelectorAll("select[data-r]").forEach((sel) => (sel.onchange = async () => { await updateDoc(doc(db, "users", sel.dataset.r), { role: sel.value }); toast("Perfil alterado."); render(); }));
+  v.querySelectorAll("select[data-cg]").forEach((sel) => (sel.onchange = async () => { await updateDoc(doc(db, "users", sel.dataset.cg), { cargo: sel.value }); toast("Cargo alterado."); }));
   v.querySelectorAll("[data-s]").forEach((b) => (b.onclick = async () => { await sendPasswordResetEmail(auth, b.dataset.s); toast("E-mail de redefinição enviado."); }));
 }
 

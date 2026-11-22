@@ -189,7 +189,7 @@ service cloud.firestore {
     // Ponto: só criar (horário do servidor). Sem alterar nem apagar, para ninguém, nem o master.
     match /timePonto/{id} {
       allow read: if ativo() && (master() || resource.data.uid == request.auth.uid);
-      allow create: if ativo() && request.resource.data.uid == request.auth.uid && request.resource.data.em == request.time;
+      allow create: if ativo() && perfil().cargo in ["auxiliar", "gerente", "recepcao", "assistente"] && request.resource.data.uid == request.auth.uid && request.resource.data.em == request.time;
       allow update, delete: if false;
     }
     match /timeCorrecoes/{id} {

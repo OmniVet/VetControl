@@ -1,7 +1,7 @@
 // "Nosso time": agenda de atividades, relatórios/avaliações (só master) e presença (ponto).
 // Recebe do app.js as ferramentas prontas (banco, janelas, impressão…) para não repetir código.
 export function iniciarTime(c) {
-  const { db, fb, $, esc, toast, abrirModal, opts, hoje, eu, isMaster, docImpressao, sha256, entrarComSenha, CRITERIOS, CLINICA_NOME } = c;
+  const { db, fb, $, esc, toast, abrirModal, opts, hoje, eu, isMaster, docImpressao, sha256, entrarComSenha, CRITERIOS, CLINICA_NOME, cltDe } = c;
   const { collection, doc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, serverTimestamp } = fb;
   const DIAS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
   const iso = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -99,7 +99,7 @@ export function iniciarTime(c) {
     const avs = master ? await lista("timeAvaliacoes") : [];
     v.innerHTML = `<div class="barra"><h2>Relatórios e histórico do time</h2><label class="inline">Mês <input type="month" id="trMes" value="${mes}"></label>
       ${master ? `<button class="btn primary" id="trPlano">+ Planejar avaliação</button>` : ""}</div>
-      ${master ? `<p class="muted small">🔒 As avaliações só aparecem para o Gerente/Master. A pessoa avaliada vê apenas o próprio percentual e a confirmação para assinar.</p>` : ""}<div id="trCorpo"></div>`;
+      ${master && pes.some((p) => !p.cargo) ? `<p class="aviso-ctrl small">Há pessoas sem cargo definido. Defina em Configurações → Usuários para entrarem (ou não) nas avaliações.</p>` : ""}${master ? `<p class="muted small">🔒 As avaliações só aparecem para o Gerente/Master. A pessoa avaliada vê apenas o próprio percentual e a confirmação para assinar.</p>` : ""}<div id="trCorpo"></div>`;
     const desenhar = async () => {
       const fim = fimDoMes(mes), feitas = await concluidas(mes + "-01", fim), quem = master ? pes : pes.filter((p) => p.id === me.uid);
       const linhas = quem.map((p) => ({ p, s: stats(ats, feitas, p.id, mes + "-01", fim) })).filter((x) => x.s.plan);
@@ -115,7 +115,8 @@ export function iniciarTime(c) {
         <h3>${master ? "Confirmações e assinaturas" : "Minhas confirmações de avaliação"}</h3><table><thead><tr><th>Pessoa</th><th>Período</th><th>Conversa</th><th>Assinatura</th><th></th></tr></thead><tbody>${ass.map(assHtml).join("") || `<tr><td colspan="5" class="muted">Nada por aqui ainda.</td></tr>`}</tbody></table>`;
     };
     $("#trMes").onchange = (e) => { mes = e.target.value || mes; desenhar(); };
-    const planejar = () => abrirModal("Planejar avaliação", `<label>Colaborador(a)<select name="pessoaId">${opts(pes)}</select></label>
+    const planejar = () => abrirModal("Planejar avaliação", `<label>Colaborador(a)<select name="pessoaId">${opts(pes.filter(cltDe))}</select></label>
+      <p class="small muted">Médicos veterinários são PJ e não entram em avaliação. Só Auxiliar, Gerente, Recepção e Assistente operacional.</p>
       <label>Período avaliado<input type="month" name="periodo" value="${mes}" required></label><label>Data e hora da conversa<input type="datetime-local" name="dataHora" required></label>
       <p class="small muted">O sistema monta o plano com o percentual de atividades cumpridas e as não cumpridas no período, e os critérios de avaliação.</p>`, async (f) => {
       const p = pes.find((x) => x.id === f.pessoaId), plano = stats(ats, await concluidas(f.periodo + "-01", fimDoMes(f.periodo)), p.id, f.periodo + "-01", fimDoMes(f.periodo));
@@ -150,8 +151,8 @@ export function iniciarTime(c) {
 
   async function telaPresenca(v) {
     const me = eu(); let cfg = (await lista("timeConfig")).find((x) => x.id === "geral") || {}; const pes = await pessoas();
-    let pid = me.uid, mes = mesAtual(); const semPonto = () => (cfg.semPonto || []).includes(pid);
-    v.innerHTML = `<div class="barra"><h2>Presença do time</h2>${isMaster() ? `<select id="tpP">${opts(pes.map((p) => ({ id: p.id, nome: p.nome + (p.id === me.uid ? " (eu)" : "") })), pid)}</select><button class="btn" id="tpCfg">Configurar</button>` : ""}</div>
+    let pid = me.uid, mes = mesAtual(); const semPonto = () => !cltDe(pes.find((p) => p.id === pid) || {});
+    v.innerHTML = `<div class="barra"><h2>Presença do time</h2>${isMaster() ? `<select id="tpP">${opts(pes.filter(cltDe).concat(pes.filter((p) => p.id === me.uid && !cltDe(p))).map((p) => ({ id: p.id, nome: p.nome + (p.id === me.uid ? " (eu)" : "") })), pid)}</select><button class="btn" id="tpCfg">Configurar</button>` : ""}</div>
       <div class="aviso-ctrl small">Controle interno de presença (não é o ponto oficial homologado). O horário é gravado pelo servidor, os registros não podem ser alterados nem apagados por ninguém (nem pelo master); erros são corrigidos por pedido com justificativa. ${cfg.inicioTeste ? `Período de teste iniciado em <b>${esc(br(cfg.inicioTeste))}</b>.` : ""}</div><div id="tpCorpo"></div>`;
     const desenhar = async () => {
       const [marcasTodas, cors] = await Promise.all([lista("timePonto", where("uid", "==", pid)), lista("timeCorrecoes", ...(isMaster() ? [] : [where("uid", "==", me.uid)]))]);
@@ -163,7 +164,7 @@ export function iniciarTime(c) {
       const linhas = Object.keys(dias).sort().map((d) => { const r = minutosDoDia(dias[d]); total += r.min; const cs = corsPessoa.filter((x) => x.data === d && x.status === "Aprovada");
         return `<tr><td>${br(d)} ${DIAS[dt(d).getDay()]}</td><td>${dias[d].map((m) => `${TIPOS[m.tipo].split(" ")[0]} ${hhmm(m.em)}`).join(" · ")}${cs.map((x) => `<div class="small" style="color:#8a5a00">Correção aprovada: ${esc(TIPOS[x.tipo])} ${esc(x.hora)} — ${esc(x.justificativa)}</div>`).join("")}</td><td>${hm(r.min)}${r.aberto ? ` <span class="tag alerta">incompleto</span>` : ""}</td></tr>`; });
       const pend = cors.filter((x) => x.status === "Pendente");
-      $("#tpCorpo").innerHTML = `${pid === me.uid ? (semPonto() ? `<p class="aviso-ctrl">Você está marcada(o) como prestador(a) sem ponto. Não é necessário registrar presença.</p>` : `<div class="card"><b>Hoje, ${br(hoje())}:</b> ${hojeM.map((m) => `${TIPOS[m.tipo]} ${hhmm(m.em)}`).join(" · ") || "nenhum registro ainda"}<div style="margin-top:10px">
+      $("#tpCorpo").innerHTML = `${pid === me.uid ? (semPonto() ? `<p class="aviso-ctrl">Seu cargo (médico veterinário PJ, ou cargo ainda não definido) não registra presença. Se for engano, peça ao master para definir o cargo em Usuários.</p>` : `<div class="card"><b>Hoje, ${br(hoje())}:</b> ${hojeM.map((m) => `${TIPOS[m.tipo]} ${hhmm(m.em)}`).join(" · ") || "nenhum registro ainda"}<div style="margin-top:10px">
         <button class="btn primary grande" id="tpMarca" data-t="${prox}">⏱ Registrar: ${TIPOS[prox]}</button> <button class="btn small" id="tpOutro">Outro tipo…</button> <button class="btn small" id="tpCorrigir">Pedir correção</button></div></div>`) : ""}
         <div class="barra" style="margin-top:14px"><h3 style="margin:0;flex:1">Espelho do mês</h3><input type="month" id="tpMes" value="${mes}"><button class="btn small" id="tpImp">🖨 Imprimir</button><button class="btn small" id="tpVer">Verificar integridade</button></div>
         <table><thead><tr><th>Dia</th><th>Registros</th><th>Horas</th></tr></thead><tbody>${linhas.join("") || `<tr><td colspan="3" class="muted">Sem registros neste mês.</td></tr>`}</tbody></table><p><b>Total do mês: ${hm(total)}</b></p>
@@ -188,8 +189,8 @@ export function iniciarTime(c) {
     };
     $("#tpP") && ($("#tpP").onchange = (e) => { pid = e.target.value; desenhar(); });
     $("#tpCfg") && ($("#tpCfg").onclick = () => abrirModal("Configurar presença", `<label>Data de início do período de teste<input type="date" name="inicioTeste" value="${esc(cfg.inicioTeste || "")}"></label>
-      <div>Quem NÃO bate ponto (prestadores PJ):<div class="dias-chk">${pes.map((p) => `<label><input type="checkbox" name="pj_${p.id}" ${(cfg.semPonto || []).includes(p.id) ? "checked" : ""}> ${esc(p.nome)}</label>`).join("")}</div></div>`, async (f) => {
-      cfg = { inicioTeste: f.inicioTeste, semPonto: pes.filter((p) => f["pj_" + p.id]).map((p) => p.id) }; await setDoc(doc(db, "timeConfig", "geral"), cfg); }));
+      <p class="small muted">Quem registra presença é definido pelo cargo (Usuários): Auxiliar, Gerente, Recepção e Assistente operacional. Médicos veterinários (PJ) não registram.</p>`, async (f) => {
+      cfg = { inicioTeste: f.inicioTeste }; await setDoc(doc(db, "timeConfig", "geral"), cfg); }));
     desenhar();
   }
   return { "time-agenda": telaAgenda, "time-relatorios": telaRelatorios, "time-presenca": telaPresenca };
