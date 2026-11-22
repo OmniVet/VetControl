@@ -27,3 +27,5 @@ Perfis: master > estoquista (`podeConfirmar()`) > usuario (lançamentos viram pe
 - Se criar coleção nova no Firestore, acrescentar a regra em `firestore.rules` e avisar a usuária para publicar de novo.
 
 - `equivalencias-mercado.js`: grupos prontos (fios absorvíveis por tipo, dexametasona) com `termos` que ligam produtos do estoque; botão em Equivalentes. Salas novas: instrumental, limpeza_material. Aba Salas tem coluna "Qtd. atual na sala".
+- Início agora em MÓDULOS (`MODULOS` + campo `mod` em cada item de `SETORES`): Exames · Estoque e Compras · Ambulatorial e Recepção · Nosso time · Geral.
+- `time.js` ("Nosso time", recebe helpers do app.js via `iniciarTime`): agenda de atividades (`timeAtividades`, `timeConclusoes`), relatórios/avaliações/assinaturas (`timeAvaliacoes` só master, `timeAssinaturas`), presença/ponto (`timePonto` só criação com hash encadeado, `timeCorrecoes`, `timeConfig`). Regras novas em `firestore.rules`: AVISAR a usuária para publicar.

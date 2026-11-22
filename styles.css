@@ -139,3 +139,8 @@ table.ficha input[type=number]{width:90px}
 .be-labbox{border:1px solid var(--borda);border-radius:10px;padding:10px}
 .be-tl{display:flex;align-items:center;gap:8px;padding:2px 0;font-size:.9rem}.be-tl b{margin-left:auto}
 .be-dot{width:14px;height:14px;border-radius:50%;flex:none}
+
+.modulo{margin-bottom:26px}.modulo-tit{margin:0 0 10px;color:#0d47a1;border-bottom:2px solid #c5d6ee;padding-bottom:6px}.modulo-tit small{color:#667;font-weight:normal;margin-left:8px;font-size:.8rem}
+.barra-pct{height:8px;background:#e3eaf5;border-radius:6px;overflow:hidden;margin-top:4px}.barra-pct div{height:100%;background:#2e7d32}
+.linha-ativ{display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #e3eaf5}.linha-ativ.feita{background:#eef8ee;color:#555}.linha-ativ .hora{min-width:90px;color:#0d47a1;font-weight:bold}
+.dias-chk{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}.dias-chk label{display:flex;align-items:center;gap:4px;font-weight:normal}

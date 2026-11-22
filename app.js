@@ -2,6 +2,8 @@ import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, orderBy, runTransaction, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { cartaoHtml, CARTAO_CSS, rotulo } from "./cartao.js";
+import { iniciarTime } from "./time.js";
+import { CRITERIOS_AVALIACAO } from "./firebase-config.js";
 import { GRUPOS_MERCADO } from "./equivalencias-mercado.js";
 import { lerPlanilhaClinica, COLUNAS_MODELO, COLUNAS_SALAS, NOME_ABA } from "./importar-planilha.js";
 import { DADOS_EXAMES } from "./dados-exames.js";
@@ -104,6 +106,8 @@ function fecharModal() { $("#modal").classList.add("hidden"); }
 $("#modalCancelar").onclick = fecharModal;
 const opts = (arr, sel) => arr.map((o) => { const v = typeof o === "string" ? o : o.id, t = typeof o === "string" ? o : o.nome; return `<option value="${esc(v)}" ${v === sel ? "selected" : ""}>${esc(t)}</option>`; }).join("");
 
+const TIME = iniciarTime({ db, fb: { collection, doc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, serverTimestamp }, $, esc, toast: (t) => toast(t), abrirModal, opts, hoje, eu: () => usuario, isMaster: () => isMaster(), docImpressao: (...a) => docImpressao(...a), sha256: (t) => sha256(t), entrarComSenha: (e, s) => signInWithEmailAndPassword(auth, e, s), CRITERIOS: CRITERIOS_AVALIACAO, CLINICA_NOME: CLINICA.nome });
+
 /* ================= AUTENTICAÇÃO ================= */
 $("#loginForm").onsubmit = async (e) => {
   e.preventDefault(); const f = new FormData(e.target);
@@ -164,19 +168,29 @@ onAuthStateChanged(auth, async (u) => {
 window.addEventListener("hashchange", render);
 // Setores do Início (quadrados grandes). abas: [rota, nome]
 const SETORES = [
-  { id: "solic", n: "1", titulo: "Solicitação de exames", icone: "🧪", abas: [["nova-solicitacao", "1.1 Nova solicitação de exames"], ["exames", "1.2 Consultar solicitações realizadas"], ["busca-exames", "1.3 Busca inteligente (menor preço)"]] },
-  { id: "laudos", n: "2", titulo: "Laudos", icone: "📝", abas: [["laudos-pendentes", "2.1 Liberar laudos"], ["modelos", "2.2 Modelos de laudos"], ["laudos-liberados", "2.3 Consultar laudos liberados"]] },
-  { id: "historico", n: "3", titulo: "Histórico de exames", icone: "📊", abas: [["planilha", "Exames laboratoriais"], ["prestadores", "Imagem e prestadores"], ["producao", "Produção por médico (semana)"], ["comparativo", "Comparativo com laboratório"], ["exportar-exames", "Exportar relatórios de exames"]] },
-  { id: "compras", n: "4", titulo: "Solicitação de compras", icone: "🛒", abas: [["solicitacoes", "Pedir algo ao estoquista"]] },
-  { id: "relatorios", n: "5", titulo: "Relatórios gerais", icone: "📈", abas: [["relatorios", "Gerador de relatórios"]] },
-  { id: "estoque", n: "9", titulo: "Estoque", icone: "📦", abas: [["produtos", "9.1 Estoque geral"], ["limbo", "9.2 Limbo"], ["pedido", "9.3 Detalhes de pedido"], ["pendencias", "Pendências"], ["nfe", "Receber nota (XML)"], ["alertas", "Alertas"], ["equivalentes", "Medicamentos equivalentes"], ["cotacao", "Cotação"]] },
-  { id: "reposicao", n: "", titulo: "Reposição por setor", icone: "🏥", abas: [["salas", "Salas, geladeiras e setores"], ["ficha", "Ficha de reposição"], ["semanal", "Relatório semanal de reposição"]] },
-  { id: "inventario", n: "", titulo: "Inventário (patrimônio)", icone: "🪑", abas: [["inventario", "Equipamentos e móveis"]] },
-  { id: "config", n: "", titulo: "Configurações", icone: "⚙️", master: true, abas: [["usuarios", "Usuários"], ["fornecedores", "Fornecedores"], ["profissionais", "Profissionais"], ["catalogo", "Catálogo de exames"]] },
+  { id: "solic", mod: "exames", n: "1", titulo: "Solicitação de exames", icone: "🧪", abas: [["nova-solicitacao", "1.1 Nova solicitação de exames"], ["exames", "1.2 Consultar solicitações realizadas"], ["busca-exames", "1.3 Busca inteligente (menor preço)"]] },
+  { id: "laudos", mod: "exames", n: "2", titulo: "Laudos", icone: "📝", abas: [["laudos-pendentes", "2.1 Liberar laudos"], ["modelos", "2.2 Modelos de laudos"], ["laudos-liberados", "2.3 Consultar laudos liberados"]] },
+  { id: "historico", mod: "exames", n: "3", titulo: "Histórico de exames", icone: "📊", abas: [["planilha", "Exames laboratoriais"], ["prestadores", "Imagem e prestadores"], ["producao", "Produção por médico (semana)"], ["comparativo", "Comparativo com laboratório"], ["exportar-exames", "Exportar relatórios de exames"]] },
+  { id: "compras", mod: "estoque", n: "4", titulo: "Solicitação de compras", icone: "🛒", abas: [["solicitacoes", "Pedir algo ao estoquista"]] },
+  { id: "relatorios", mod: "geral", n: "5", titulo: "Relatórios gerais", icone: "📈", abas: [["relatorios", "Gerador de relatórios"]] },
+  { id: "estoque", mod: "estoque", n: "9", titulo: "Estoque", icone: "📦", abas: [["produtos", "9.1 Estoque geral"], ["limbo", "9.2 Limbo"], ["pedido", "9.3 Detalhes de pedido"], ["pendencias", "Pendências"], ["nfe", "Receber nota (XML)"], ["alertas", "Alertas"], ["equivalentes", "Medicamentos equivalentes"], ["cotacao", "Cotação"]] },
+  { id: "reposicao", mod: "estoque", n: "", titulo: "Reposição por setor", icone: "🏥", abas: [["salas", "Salas, geladeiras e setores"], ["ficha", "Ficha de reposição"], ["semanal", "Relatório semanal de reposição"]] },
+  { id: "inventario", mod: "estoque", n: "", titulo: "Inventário (patrimônio)", icone: "🪑", abas: [["inventario", "Equipamentos e móveis"]] },
+  { id: "config", mod: "geral", n: "", titulo: "Configurações", icone: "⚙️", master: true, abas: [["usuarios", "Usuários"], ["fornecedores", "Fornecedores"], ["profissionais", "Profissionais"], ["catalogo", "Catálogo de exames"]] },
   // Módulos que vão virar um sistema próprio (continuam funcionando aqui enquanto isso)
-  { id: "vacinas", n: "6", titulo: "Vacinas", icone: "💉", outro: true, abas: [["vacinas", "Situação das vacinas"], ["vencimentos", "Vencimentos"], ["pets", "Pets e cartões"]] },
-  { id: "ambulatorio", n: "7", titulo: "Ambulatório", icone: "🩺", outro: true, abas: [["ambulatorio", "Roteiro"]] },
-  { id: "orcamentos", n: "8", titulo: "Orçamentos", icone: "💰", outro: true, abas: [["orcamentos", "8.1 Histórico de orçamentos"], ["orcamento", "8.2 Novo orçamento"], ["servicos", "8.3 Banco de serviços"], ["pacotes", "Pacotes"]] },
+  { id: "vacinas", mod: "ambul", n: "6", titulo: "Vacinas", icone: "💉", abas: [["vacinas", "Situação das vacinas"], ["vencimentos", "Vencimentos"], ["pets", "Pets e cartões"]] },
+  { id: "ambulatorio", mod: "ambul", n: "7", titulo: "Ambulatório", icone: "🩺", abas: [["ambulatorio", "Roteiro"]] },
+  { id: "orcamentos", mod: "ambul", n: "8", titulo: "Orçamentos", icone: "💰", abas: [["orcamentos", "8.1 Histórico de orçamentos"], ["orcamento", "8.2 Novo orçamento"], ["servicos", "8.3 Banco de serviços"], ["pacotes", "Pacotes"]] },
+  { id: "time-agenda", mod: "time", n: "", titulo: "Agenda de atividades do time", icone: "📋", abas: [["time-agenda", "Agenda de atividades"]] },
+  { id: "time-relatorios", mod: "time", n: "", titulo: "Relatórios e histórico do time", icone: "📑", abas: [["time-relatorios", "Relatórios, avaliações e assinaturas"]] },
+  { id: "time-presenca", mod: "time", n: "", titulo: "Presença do time", icone: "⏱", abas: [["time-presenca", "Registro e espelho de presença"]] },
+];
+const MODULOS = [
+  { id: "exames", titulo: "Módulo Exames", sub: "Exames, Laudos e Histórico de Exames", icone: "🧪" },
+  { id: "estoque", titulo: "Módulo Estoque e Compras", sub: "Estoque, Inventário, Compras e Reposição por setor", icone: "📦" },
+  { id: "ambul", titulo: "Módulo Ambulatorial e Recepção", sub: "Vacinação, Ambulatorial e Orçamentos", icone: "🩺" },
+  { id: "time", titulo: "Módulo Nosso time", sub: "Agenda de atividades, relatórios/avaliações e presença", icone: "👥" },
+  { id: "geral", titulo: "Geral", sub: "Relatórios gerais e configurações", icone: "⚙️" }
 ];
 async function render() {
   if (!usuario) return;
@@ -187,7 +201,7 @@ async function render() {
   atualizarBadge();
   const v = $("#view"); v.innerHTML = `<p class="muted">Carregando…</p>`;
   const telas = { "nova-solicitacao": telaNovaSolicitacao, "busca-exames": telaBuscaExames, "laudos-pendentes": telaLaudosPendentes, "laudos-liberados": telaLaudosLiberados, producao: telaProducao, "exportar-exames": (v) => telaRelatorios(v, "exames"),
-    equivalentes: telaEquivalentes, vencimentos: telaVencimentos, vacinas: telaVacinas, pets: telaPets, ambulatorio: telaAmbulatorio, orcamento: telaOrcamento, orcamentos: telaOrcamentos, servicos: telaServicos, pacotes: telaPacotes, prestadores: (v) => telaPlanilha(v, "prest"), comparativo: telaComparativo, modelos: telaModelos, limbo: telaLimbo, pendencias: telaPendencias, planilha: telaPlanilha, catalogo: telaCatalogo, painel: telaPainel, alertas: telaAlertas, profissionais: telaProfissionais, cotacao: telaCotacao, inventario: telaInventario, nfe: telaNfe, solicitacoes: telaSolicitacoes, exames: telaExames, produtos: telaProdutos, salas: telaSalas, ficha: telaFicha, semanal: telaSemanal, pedido: telaPedido, relatorios: telaRelatorios, fornecedores: telaFornecedores, usuarios: telaUsuarios };
+    ...TIME, equivalentes: telaEquivalentes, vencimentos: telaVencimentos, vacinas: telaVacinas, pets: telaPets, ambulatorio: telaAmbulatorio, orcamento: telaOrcamento, orcamentos: telaOrcamentos, servicos: telaServicos, pacotes: telaPacotes, prestadores: (v) => telaPlanilha(v, "prest"), comparativo: telaComparativo, modelos: telaModelos, limbo: telaLimbo, pendencias: telaPendencias, planilha: telaPlanilha, catalogo: telaCatalogo, painel: telaPainel, alertas: telaAlertas, profissionais: telaProfissionais, cotacao: telaCotacao, inventario: telaInventario, nfe: telaNfe, solicitacoes: telaSolicitacoes, exames: telaExames, produtos: telaProdutos, salas: telaSalas, ficha: telaFicha, semanal: telaSemanal, pedido: telaPedido, relatorios: telaRelatorios, fornecedores: telaFornecedores, usuarios: telaUsuarios };
   try { await (telas[rota] || telaPainel)(v); } catch (e) { v.innerHTML = `<p class="erro">Erro: ${esc(e.message)}</p>`; console.error(e); }
   window.scrollTo(0, 0);
 }
@@ -1116,11 +1130,9 @@ async function telaAlertas(v) {
 /* ================= INÍCIO (5 PAINÉIS) ================= */
 async function telaPainel(v) {
   const vis = SETORES.filter((x) => !x.master || isMaster());
-  const tile = (x) => `<a class="tile ${x.outro ? "tile-outro" : ""}" href="#${x.abas[0][0]}"><span class="tile-ico">${x.icone}</span><b>${x.n ? x.n + " · " : ""}${esc(x.titulo)}</b><span class="tile-info" id="info-${x.id}"></span></a>`;
+  const tile = (x) => `<a class="tile" href="#${x.abas[0][0]}"><span class="tile-ico">${x.icone}</span><b>${x.n ? x.n + " · " : ""}${esc(x.titulo)}</b><span class="tile-info" id="info-${x.id}"></span></a>`;
   v.innerHTML = `<h2 class="ola">Olá, ${esc(usuario.nome)} 👋</h2>
-    <div class="tiles">${vis.filter((x) => !x.outro).map(tile).join("")}</div>
-    <h3 class="muted" style="margin-top:26px">Outros módulos <small>(serão um sistema próprio)</small></h3>
-    <div class="tiles tiles-peq">${vis.filter((x) => x.outro).map(tile).join("")}</div>`;
+    ${MODULOS.map((m) => { const itens = vis.filter((x) => x.mod === m.id); return itens.length ? `<section class="modulo"><h3 class="modulo-tit"><span>${m.icone}</span> ${esc(m.titulo)} <small>${esc(m.sub)}</small></h3><div class="tiles">${itens.map(tile).join("")}</div></section>` : ""; }).join("")}`;
   // números de apoio nos quadrados (carregam depois, sem travar a tela)
   try {
     const [exs, sols, pend] = await Promise.all([getDocs(collection(db, "exames")), getDocs(query(collection(db, "solicitacoes"), where("status", "==", "Pendente"))), podeConfirmar() ? getDocs(query(collection(db, "pendencias"), where("status", "==", "Pendente"))) : null]);

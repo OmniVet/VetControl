@@ -118,3 +118,6 @@ export const DIAS_A_VENCER = 15;
 // Portal do tutor (login por CPF). Não precisa existir: é só o formato interno do login.
 export const DOMINIO_TUTOR = "tutor.vetcontrol.app";
 export const TIPOS_AMBULATORIO = ["Check-up", "Exame", "Consulta", "Medicação", "Curativo", "Retorno"];
+
+// Critérios da avaliação do time (notas de 1 a 5). A confirmar/editar pela gestão.
+export const CRITERIOS_AVALIACAO = ["Cumprimento da rotina", "Qualidade do trabalho", "Pontualidade e presença", "Trabalho em equipe", "Comunicação e atendimento", "Iniciativa e organização"];
