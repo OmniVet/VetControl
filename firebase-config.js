@@ -68,7 +68,8 @@ export const CATALOGO_INICIAL = [
 // "Origem" das planilhas (pode digitar outras na hora)
 export const ORIGENS = ["PARTICULAR", "PETLOVE", "PETTOP", "A.PET", "DOGLIFE", "PETLOVE/PARTICULAR", "PETLOVE/LOC. SALA"];
 // Cabeçalho dos documentos impressos
-export const CLINICA = { nome: "VetPlus", endereco: "Endereço da clínica", telefone: "(00) 0000-0000", whatsapp: "(00) 00000-0000" };
+// Dados que saem no cabeçalho dos laudos. Preencha cnpj/telefone/endereço e coloque o arquivo da logo (logo-vetplus.png) na pasta do sistema.
+export const CLINICA = { nome: "VetPlus Especialidades", cnpj: "", endereco: "Endereço da clínica", telefone: "(00) 0000-0000", whatsapp: "(00) 00000-0000", logoLaudo: "logo-vetplus.png" };
 export const DIAS_SEM_USO = 60; // alerta de produto parado
 export const STATUS_EXAME = ["Solicitado", "Coletado", "Enviado ao laboratório", "Resultado disponível", "Entregue ao tutor", "Cancelado"];
 export const STATUS_REPOSICAO = ["Pendente", "Em andamento", "Atendida", "Recusada"];

@@ -145,3 +145,4 @@ table.ficha input[type=number]{width:90px}
 .linha-ativ{display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #e3eaf5}.linha-ativ.feita{background:#eef8ee;color:#555}.linha-ativ .hora{min-width:90px;color:#0d47a1;font-weight:bold}
 .dias-chk{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}.dias-chk label{display:flex;align-items:center;gap:4px;font-weight:normal}
 .logo{display:flex;align-items:center;gap:8px}.logo-ico{height:34px;width:auto}.logo-login{display:block;max-width:260px;width:100%;margin:0 auto 6px}
+.cat-linha td{background:#e8f0fb;color:#0d47a1;padding-top:10px}

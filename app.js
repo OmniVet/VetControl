@@ -2,6 +2,7 @@ import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, orderBy, runTransaction, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { cartaoHtml, CARTAO_CSS, rotulo } from "./cartao.js";
+import { MODELOS_LAUDO, CATEGORIAS_LAUDO } from "./modelos-laudo.js";
 import { iniciarTime } from "./time.js";
 import { CARGOS, CRITERIOS_AVALIACAO } from "./firebase-config.js";
 import { GRUPOS_MERCADO } from "./equivalencias-mercado.js";
@@ -1540,17 +1541,21 @@ async function telaComparativo(v) {
 const CAMPOS_LAUDO = ["paciente", "especie", "raca", "sexo", "idade", "peso", "tutor", "exame", "data", "solicitante", "profissional", "crmv"];
 async function telaModelos(v) {
   const ms = (await getDocs(query(collection(db, "modelosLaudo"), orderBy("nome")))).docs.map((d) => ({ id: d.id, ...d.data() }));
-  v.innerHTML = `<div class="barra"><h2>Modelos de laudo</h2>${isMaster() ? `<button class="btn primary" id="novoM">+ Novo modelo</button>` : ""}</div>
+  v.innerHTML = `<div class="barra"><h2>Modelos de laudo</h2>${isMaster() ? `<button class="btn" id="seedM">Carregar modelos básicos (cães e gatos)</button><button class="btn primary" id="novoM">+ Novo modelo</button>` : ""}</div>
   <p class="muted small">Crie um modelo para cada exame. Use os campos automáticos entre chaves, que são preenchidos sozinhos: ${CAMPOS_LAUDO.map((c) => `<code>{{${c}}}</code>`).join(" ")}</p>
   <table><thead><tr><th>Modelo</th><th>Usado para os exames</th><th></th></tr></thead><tbody>
-  ${ms.map((m) => `<tr><td><b>${esc(m.nome)}</b></td><td class="small">${esc((m.exames || []).join(", "))}</td><td>${isMaster() ? `<button class="btn small" data-e="${m.id}">Editar</button><button class="btn small danger" data-x="${m.id}">Excluir</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">Nenhum modelo. Envie seus modelos e eu ajudo a montar.</td></tr>`}</tbody></table>`;
+  ${[...new Set([...CATEGORIAS_LAUDO, ...ms.map((m) => m.categoria || "Sem categoria")])].map((cat) => { const lst = ms.filter((m) => (m.categoria || "Sem categoria") === cat); return lst.length ? `<tr class="cat-linha"><td colspan="3"><b>${esc(cat)}</b> <span class="muted small">(${lst.length})</span></td></tr>` + lst.map((m) => `<tr><td><b>${esc(m.nome)}</b></td><td class="small">${esc((m.exames || []).join(", "))}</td><td>${isMaster() ? `<button class="btn small" data-e="${m.id}">Editar</button><button class="btn small danger" data-x="${m.id}">Excluir</button>` : ""}</td></tr>`).join("") : ""; }).join("") || `<tr><td colspan="3" class="muted">Nenhum modelo. Use "Carregar modelos básicos".</td></tr>`}</tbody></table>`;
   const modal = (m = {}) => abrirModal(m.id ? "Editar modelo" : "Novo modelo de laudo", `
     <label>Nome do modelo<input name="nome" required value="${esc(m.nome)}" placeholder="Ex.: Ultrassonografia abdominal"></label>
+    <label>Categoria<select name="categoria">${opts(CATEGORIAS_LAUDO.concat(m.categoria && !CATEGORIAS_LAUDO.includes(m.categoria) ? [m.categoria] : []), m.categoria || CATEGORIAS_LAUDO[0])}</select></label>
     <label>Exames que usam este modelo (separe por vírgula)<input name="exames" value="${esc((m.exames || []).join(", "))}" placeholder="ULTRASSOM ABDOMINAL, Ultrassonografia abdominal"></label>
     <label>Texto do laudo<textarea name="conteudo" rows="16" style="font-family:monospace">${esc(m.conteudo || "LAUDO DE {{exame}}\n\nPaciente: {{paciente}} · Espécie: {{especie}} · Raça: {{raca}} · Idade: {{idade}}\nTutor: {{tutor}} · Data: {{data}} · Solicitante: {{solicitante}}\n\nACHADOS:\n\n\nCONCLUSÃO:\n")}</textarea></label>`,
-    async (f) => { const d = { nome: f.nome.trim(), exames: f.exames.split(",").map((t) => t.trim()).filter(Boolean), conteudo: f.conteudo };
+    async (f) => { const d = { nome: f.nome.trim(), categoria: f.categoria, exames: f.exames.split(",").map((t) => t.trim()).filter(Boolean), conteudo: f.conteudo };
       m.id ? await updateDoc(doc(db, "modelosLaudo", m.id), d) : await addDoc(collection(db, "modelosLaudo"), d); toast("Modelo salvo."); });
   $("#novoM") && ($("#novoM").onclick = () => modal());
+  $("#seedM") && ($("#seedM").onclick = async () => { let n = 0; $("#seedM").disabled = true;
+    for (const m of MODELOS_LAUDO) { if (ms.some((x) => norm(x.nome) === norm(m.nome))) continue; await addDoc(collection(db, "modelosLaudo"), { nome: m.nome, categoria: m.categoria, exames: [m.nome], conteudo: m.conteudo }); n++; }
+    toast(n ? `${n} modelos carregados.` : "Os modelos básicos já estavam carregados."); render(); });
   v.querySelectorAll("[data-e]").forEach((b) => (b.onclick = () => modal(ms.find((m) => m.id === b.dataset.e))));
   v.querySelectorAll("[data-x]").forEach((b) => (b.onclick = async () => { if (confirm("Excluir modelo?")) { await deleteDoc(doc(db, "modelosLaudo", b.dataset.x)); render(); } }));
 }
@@ -1566,7 +1571,7 @@ async function emitirLaudo(x, e, k, profs) {
     data: fmtData(dataDe(e) || hoje()), solicitante: x.veterinario, profissional: p?.nome, crmv: p?.crmv }[c] ?? ""));
   const pIni = permitidos.find((p) => p.nome === e.realizadoPor) || meu || permitidos[0];
   abrirModal(`Laudo — ${e.nome} · ${x.paciente}`, `
-    <div class="duas"><label>Modelo<select id="lMod"><option value="">— texto livre —</option>${ms.map((m) => `<option value="${m.id}" ${m.id === sugerido?.id ? "selected" : ""}>${esc(m.nome)}</option>`).join("")}</select></label>
+    <div class="duas"><label>Modelo<select id="lMod"><option value="">— texto livre —</option>${[...new Set(ms.map((m) => m.categoria || "Sem categoria"))].map((cat) => `<optgroup label="${esc(cat)}">${ms.filter((m) => (m.categoria || "Sem categoria") === cat).map((m) => `<option value="${m.id}" ${m.id === sugerido?.id ? "selected" : ""}>${esc(m.nome)}</option>`).join("")}</optgroup>`).join("")}</select></label>
     <label>Profissional que libera<select name="prof" id="lProf">${permitidos.map((p) => `<option value="${p.id}" ${p.id === pIni?.id ? "selected" : ""}>${esc(p.nome)}</option>`).join("")}</select></label></div>
     <label>Texto do laudo (pode editar à vontade)<textarea name="texto" id="lTxt" rows="18" style="font-family:monospace"></textarea></label>
     <label>Imprimir em<select name="fmt"><option value="a4">Folha A4</option><option value="80">Bobina 80 mm</option></select></label>`,
@@ -1582,7 +1587,7 @@ async function emitirLaudo(x, e, k, profs) {
   $("#lMod").onchange = aplicar; $("#lProf").onchange = aplicar; aplicar();
 }
 function imprimirLaudo(l, fmt = "a4") {
-  docImpressao(`<div class="cab"><b>${esc(CLINICA.nome)}</b><br><small>${esc(CLINICA.endereco)} · ${esc(CLINICA.telefone)}</small></div>
+  docImpressao(`<div class="cab"><img src="${new URL(CLINICA.logoLaudo || "logo-vetplus.png", location.href).href}" alt="" style="max-height:70px;display:block;margin:0 auto 4px" onerror="this.remove()"><b>${esc(CLINICA.nome)}</b><br><small>${[CLINICA.cnpj && "CNPJ " + CLINICA.cnpj, CLINICA.endereco, CLINICA.telefone && "Tel. " + CLINICA.telefone, CLINICA.whatsapp && "WhatsApp " + CLINICA.whatsapp].filter(Boolean).map(esc).join(" · ")}</small></div>
     <h1>Laudo — ${esc(l.exame)}</h1><div class="texto">${esc(l.texto)}</div>
     <p style="text-align:right;margin-top:20px"><small>Liberado em ${l.liberadoEm?.toDate ? l.liberadoEm.toDate().toLocaleString("pt-BR") : new Date().toLocaleString("pt-BR")}</small></p>
     ${assinaturaHtml({ nome: l.profissional, crmv: l.crmv, assinatura: l.assinatura })}`, fmt, `Laudo ${l.exame} - ${l.paciente}`);
