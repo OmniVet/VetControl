@@ -1286,7 +1286,7 @@ function htmlSolicitacao(x, bob, prof) {
   ${x.obs ? `<p><b>Obs.:</b> ${esc(x.obs)}</p>` : ""}${assinaturaHtml(prof, x.veterinario)}`;
 }
 function assinaturaHtml(prof, nome) {
-  return `<div class="ass">${prof?.assinatura ? `<img src="${prof.assinatura}">` : ""}<div class="linha">${esc(prof?.nome || nome || "")}<br><small>Médico(a) Veterinário(a)${prof?.crmv ? " · CRMV " + esc(prof.crmv) : ""}</small></div></div>`;
+  return `<div class="ass ${prof?.assinatura ? "" : "sem"}">${prof?.assinatura ? `<img src="${prof.assinatura}">` : ""}<div class="linha">${esc(prof?.nome || nome || "")}<br><small>Médico(a) Veterinário(a)${prof?.crmv ? " · CRMV " + esc(prof.crmv) : ""}</small></div></div>`;
 }
 function docImpressao(corpo, fmt, titulo) {
   const bob = fmt !== "a4", larg = fmt === "58" ? "54mm" : "74mm";
@@ -1299,12 +1299,17 @@ function docImpressao(corpo, fmt, titulo) {
     table{width:100%;border-collapse:collapse}td{padding:4px;border-bottom:1px dashed #bbb;vertical-align:top}
     .texto{white-space:pre-wrap;line-height:1.5}
     .ass{margin-top:${bob ? "20px" : "50px"};text-align:center}.ass img{max-height:70px;max-width:220px;display:block;margin:0 auto -8px}
-    .linha{border-top:1px solid #000;display:inline-block;padding-top:4px;min-width:${bob ? "90%" : "260px"}}
+    .ass.sem{margin-top:${bob ? "8px" : "22px"}}.linha{border-top:1px solid #000;display:inline-block;padding-top:4px;min-width:${bob ? "90%" : "260px"}}
   </style></head><body>${corpo}<script>window.onload=()=>print()<\/script></body></html>`);
   w.document.close();
 }
 
 /* ================= PROFISSIONAIS (com assinatura digital) ================= */
+function comprimirImagem(file, max = 1000) {
+  return new Promise((res, rej) => { const img = new Image(), r = new FileReader(); r.onload = () => (img.src = r.result); r.onerror = rej; img.onerror = rej;
+    img.onload = () => { const k = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement("canvas"); c.width = img.width * k; c.height = img.height * k; c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); res(c.toDataURL("image/jpeg", 0.7)); };
+    r.readAsDataURL(file); });
+}
 function comprimirAssinatura(file) {
   return new Promise((res, rej) => { const img = new Image(), r = new FileReader(); r.onload = () => (img.src = r.result); r.onerror = rej;
     img.onload = () => { const k = Math.min(1, 500 / img.width), c = document.createElement("canvas"); c.width = img.width * k; c.height = img.height * k;
@@ -1538,7 +1543,7 @@ async function telaComparativo(v) {
 }
 
 /* ================= MODELOS DE LAUDO + EMISSÃO ================= */
-const CAMPOS_LAUDO = ["paciente", "especie", "raca", "sexo", "idade", "peso", "tutor", "exame", "data", "solicitante", "profissional", "crmv"];
+const CAMPOS_LAUDO = ["hora", "paciente", "especie", "raca", "sexo", "idade", "peso", "tutor", "exame", "data", "solicitante", "profissional", "crmv"];
 async function telaModelos(v) {
   const ms = (await getDocs(query(collection(db, "modelosLaudo"), orderBy("nome")))).docs.map((d) => ({ id: d.id, ...d.data() }));
   v.innerHTML = `<div class="barra"><h2>Modelos de laudo</h2>${isMaster() ? `<button class="btn" id="seedM">Carregar modelos básicos (cães e gatos)</button><button class="btn primary" id="novoM">+ Novo modelo</button>` : ""}</div>
@@ -1568,19 +1573,25 @@ async function emitirLaudo(x, e, k, profs) {
   if (!permitidos.length) return toast(isMaster() ? "Cadastre um profissional com 'Pode liberar laudos' marcado." : "Seu login não está ligado a um profissional que libera laudos.");
   const sugerido = ms.find((m) => (m.exames || []).some((n) => norm(n) === norm(e.nome))) || ms.find((m) => parecido(m.nome, e.nome));
   const preencher = (txt, p) => txt.replace(/\{\{(\w+)\}\}/g, (_, c) => ({ paciente: x.paciente, especie: x.especie, raca: x.raca, sexo: x.sexo, idade: x.idade, peso: x.peso, tutor: x.tutor, exame: e.nome,
-    data: fmtData(dataDe(e) || hoje()), solicitante: x.veterinario, profissional: p?.nome, crmv: p?.crmv }[c] ?? ""));
+    data: fmtData(dataDe(e) || hoje()), hora: horaDe(e) || "___:___", solicitante: x.veterinario, profissional: p?.nome, crmv: p?.crmv }[c] ?? ""));
   const pIni = permitidos.find((p) => p.nome === e.realizadoPor) || meu || permitidos[0];
   abrirModal(`Laudo — ${e.nome} · ${x.paciente}`, `
     <div class="duas"><label>Modelo<select id="lMod"><option value="">— texto livre —</option>${[...new Set(ms.map((m) => m.categoria || "Sem categoria"))].map((cat) => `<optgroup label="${esc(cat)}">${ms.filter((m) => (m.categoria || "Sem categoria") === cat).map((m) => `<option value="${m.id}" ${m.id === sugerido?.id ? "selected" : ""}>${esc(m.nome)}</option>`).join("")}</optgroup>`).join("")}</select></label>
     <label>Profissional que libera<select name="prof" id="lProf">${permitidos.map((p) => `<option value="${p.id}" ${p.id === pIni?.id ? "selected" : ""}>${esc(p.nome)}</option>`).join("")}</select></label></div>
+    <div class="duas"><label>Data do laudo<input type="date" name="dataLaudo" value="${hoje()}" required></label><label>Imagens do exame (opcional, até 4)<input type="file" name="imgs" accept="image/*" multiple></label></div>
+    <label>Assinatura / carimbo do médico em imagem (opcional)<input type="file" name="assImg" accept="image/*"></label>
+    <label style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" name="usaAss" checked> Usar a assinatura cadastrada do profissional (se ele tiver)</label>
     <label>Texto do laudo (pode editar à vontade)<textarea name="texto" id="lTxt" rows="18" style="font-family:monospace"></textarea></label>
     <label>Imprimir em<select name="fmt"><option value="a4">Folha A4</option><option value="80">Bobina 80 mm</option></select></label>`,
-  async (f) => {
+  async (f, form) => {
     const p = permitidos.find((p) => p.id === f.prof);
+    const ass = form.assImg.files[0] ? await comprimirAssinatura(form.assImg.files[0]) : f.usaAss ? p.assinatura || "" : "";
+    const imagens = []; for (const fl of [...form.imgs.files].slice(0, 4)) imagens.push(await comprimirImagem(fl));
+    if (JSON.stringify(imagens).length + ass.length > 800000) throw new Error("Imagens muito pesadas. Use menos imagens ou imagens menores.");
     const ref = await addDoc(collection(db, "laudos"), { exameId: x.id, k, paciente: x.paciente, tutor: x.tutor, exame: e.nome, texto: f.texto, profissionalId: p.id, profissional: p.nome, crmv: p.crmv || "",
-      assinatura: p.assinatura || "", liberadoPor: usuario.nome, liberadoEm: serverTimestamp() });
+      assinatura: ass, imagens, dataLaudo: f.dataLaudo, liberadoPor: usuario.nome, liberadoEm: serverTimestamp() });
     await salvarCampo(x.id, k, "laudoId", ref.id); await salvarCampo(x.id, k, "laudo", "SIM");
-    imprimirLaudo({ paciente: x.paciente, exame: e.nome, texto: f.texto, profissional: p.nome, crmv: p.crmv, assinatura: p.assinatura, liberadoEm: null }, f.fmt);
+    imprimirLaudo({ paciente: x.paciente, exame: e.nome, texto: f.texto, profissional: p.nome, crmv: p.crmv, assinatura: ass, imagens, dataLaudo: f.dataLaudo, liberadoEm: null }, f.fmt);
     toast("Laudo liberado e salvo.");
   }, "Liberar laudo e imprimir");
   const aplicar = () => { const m = ms.find((m) => m.id === $("#lMod").value); const p = permitidos.find((p) => p.id === $("#lProf").value); $("#lTxt").value = preencher(m?.conteudo || "", p); };
@@ -1589,7 +1600,8 @@ async function emitirLaudo(x, e, k, profs) {
 function imprimirLaudo(l, fmt = "a4") {
   docImpressao(`<div class="cab"><img src="${new URL(CLINICA.logoLaudo || "logo-vetplus.png", location.href).href}" alt="" style="max-height:70px;display:block;margin:0 auto 4px" onerror="this.remove()"><b>${esc(CLINICA.nome)}</b><br><small>${[CLINICA.cnpj && "CNPJ " + CLINICA.cnpj, CLINICA.endereco, CLINICA.telefone && "Tel. " + CLINICA.telefone, CLINICA.whatsapp && "WhatsApp " + CLINICA.whatsapp].filter(Boolean).map(esc).join(" · ")}</small></div>
     <h1>Laudo — ${esc(l.exame)}</h1><div class="texto">${esc(l.texto)}</div>
-    <p style="text-align:right;margin-top:20px"><small>Liberado em ${l.liberadoEm?.toDate ? l.liberadoEm.toDate().toLocaleString("pt-BR") : new Date().toLocaleString("pt-BR")}</small></p>
+    ${(l.imagens || []).length ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">${l.imagens.map((s) => `<img src="${s}" style="width:100%;max-height:260px;object-fit:contain;border:1px solid #ccc">`).join("")}</div>` : ""}
+    <p style="text-align:right;margin-top:20px"><small>Data do laudo: ${l.dataLaudo ? fmtData(l.dataLaudo) : l.liberadoEm?.toDate ? l.liberadoEm.toDate().toLocaleDateString("pt-BR") : new Date().toLocaleDateString("pt-BR")}</small></p>
     ${assinaturaHtml({ nome: l.profissional, crmv: l.crmv, assinatura: l.assinatura })}`, fmt, `Laudo ${l.exame} - ${l.paciente}`);
 }
 async function verLaudo(id) { const d = await getDoc(doc(db, "laudos", id)); if (d.exists()) abrirLaudo(d.data()); }
@@ -2682,13 +2694,19 @@ async function telaLaudosPendentes(v) {
   const [docs, profs] = await Promise.all([getDocs(collection(db, "exames")).then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() }))), carregarProfissionais()]);
   const pend = docs.flatMap((x) => (x.exames || []).map(normEx).map((e, k) => ({ x, e, k }))).filter(({ e }) => precisaLaudo(e))
     .sort((a, b) => (a.x.prioridade === "Urgente" ? -1 : 0) - (b.x.prioridade === "Urgente" ? -1 : 0) || (a.e.realizadoEm || "").localeCompare(b.e.realizadoEm || ""));
-  v.innerHTML = `<div class="barra"><h2>Laudos para liberar (${pend.length})</h2></div>
+  v.innerHTML = `<div class="barra"><h2>Laudos para liberar (${pend.length})</h2><button class="btn primary" id="lbNovo">+ Laudo de paciente do histórico</button></div>
   <p class="muted small">Exames de imagem e do LAB VETPLUS entram aqui sozinhos. Libere pelo <b>modelo</b> (texto com assinatura digital) ou <b>anexe o PDF</b> pronto.</p>
   <div class="tabela-wrap"><table><thead><tr><th>Coleta / realização</th><th>Paciente / tutor</th><th>Exame</th><th>Destino</th><th>Solicitante</th><th></th></tr></thead><tbody>
   ${pend.map(({ x, e }, i) => `<tr><td>${e.realizadoEm ? new Date(e.realizadoEm).toLocaleString("pt-BR").slice(0, 17) : "—"}${x.prioridade === "Urgente" ? ` <span class="tag critico">Urgente</span>` : ""}</td>
     <td><b>${esc(x.paciente)}</b><div class="muted small">${esc(x.tutor)}</div></td><td><b>${esc(e.nome)}</b></td>
     <td class="small">${isPrest(e) ? "Imagem" + (e.realizadoPor ? " · " + esc(e.realizadoPor) : "") : esc(e.laboratorio || "")}</td><td>${esc(x.veterinario || "")}</td>
     <td class="acoes-linha"><button class="btn small primary" data-m="${i}">📝 Pelo modelo</button><button class="btn small" data-p="${i}">📎 Anexar PDF</button></td></tr>`).join("") || `<tr><td colspan="6" class="muted">Nenhum laudo pendente. 👍</td></tr>`}</tbody></table></div>`;
+  $("#lbNovo").onclick = () => { abrirModal("Novo laudo a partir do histórico", `<label>Buscar por paciente, tutor ou exame<input id="lbBusca" autocomplete="off" placeholder="Ex.: Thor, Maria, ultrassom"></label><div id="lbRes" class="small"></div>`, async () => {}, "Fechar");
+    const todos = docs.flatMap((x) => (x.exames || []).map(normEx).map((e, k) => ({ x, e, k }))).sort((a, b) => (b.e.realizadoEm || "").localeCompare(a.e.realizadoEm || ""));
+    const mostra = () => { const q = norm($("#lbBusca").value); const r = todos.filter(({ x, e }) => !q || norm(`${x.paciente} ${x.tutor} ${e.nome}`).includes(q)).slice(0, 30);
+      $("#lbRes").innerHTML = r.map(({ x, e }, i) => `<button type="button" class="btn small" style="display:block;width:100%;text-align:left;margin:3px 0" data-i="${i}"><b>${esc(x.paciente)}</b> · ${esc(x.tutor || "")} — ${esc(e.nome)} <span class="muted">(${e.realizadoEm ? fmtData(dataDe(e)) : "sem data"} · ${esc(x.veterinario || "")})</span></button>`).join("") || "<p class='muted'>Nada encontrado.</p>";
+      $("#lbRes").onclick = (ev) => { const b = ev.target.closest("[data-i]"); if (!b) return; const it = r[b.dataset.i]; fecharModal(); emitirLaudo(it.x, it.e, it.k, profs); }; };
+    $("#lbBusca").oninput = mostra; mostra(); };
   v.querySelectorAll("[data-m]").forEach((b) => (b.onclick = () => { const r = pend[b.dataset.m]; emitirLaudo(r.x, r.e, r.k, profs); }));
   v.querySelectorAll("[data-p]").forEach((b) => (b.onclick = () => anexarLaudoPdf(pend[b.dataset.p], profs)));
 }
