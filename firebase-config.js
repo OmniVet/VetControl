@@ -131,3 +131,8 @@ export const CARGOS = [
   { id: "recepcao", nome: "Recepção", clt: true },
   { id: "assistente", nome: "Assistente operacional", clt: true }
 ];
+
+// Quem pode aparecer como "Realizado por" nos exames de imagem (médicos ou empresas). Edite à vontade.
+export const EXECUTORES_IMAGEM = ["João Paulo", "Alisson", "Dhyego", "Rodrigo Noronha", "Martiniano Edwirgns", "Hernani Bezerra", "Inpulse"];
+// Exames de imagem disponíveis no início (a lista pode crescer depois no Catálogo de exames)
+export const EXAMES_IMAGEM = ["Raio-X", "Ultrassom", "Eletrocardiograma", "Ecocardiograma", "Pressão arterial"];

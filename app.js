@@ -11,6 +11,7 @@ import { GRUPOS_MERCADO } from "./equivalencias-mercado.js";
 import { lerPlanilhaClinica, COLUNAS_MODELO, COLUNAS_SALAS, NOME_ABA } from "./importar-planilha.js";
 import { DADOS_EXAMES } from "./dados-exames.js";
 import { resolverCombinacoes, calcularTubos, textoTubos, TUBOS } from "./busca-exames.js";
+import { EXECUTORES_IMAGEM, EXAMES_IMAGEM } from "./firebase-config.js";
 import { firebaseConfig, MASTER_EMAIL, DISTRIBUIDORAS, MEDIDAS, SALAS, DIAS_ALERTA_VALIDADE, EXAMES, STATUS_EXAME, STATUS_REPOSICAO, INV_CATEGORIAS, INV_LOCAIS, INV_ESTADO, LABORATORIOS, CONVENIOS, ORIGENS, CLINICA, DIAS_SEM_USO, VACINAS, VACINAS_COMERCIAIS, DIAS_A_VENCER, DOMINIO_TUTOR, TIPOS_AMBULATORIO, TABELAS_PRECO, CATEGORIAS_SERVICO, VALIDADE_ORCAMENTO_DIAS, CATALOGO_INICIAL, GEMINI_API_KEY, GEMINI_MODEL, DIAS_ANALISE, DIAS_COBERTURA_MINIMO, DIAS_COBERTURA_IDEAL, GOOGLE_CSE_KEY, GOOGLE_CSE_CX } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
@@ -1219,7 +1220,7 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
   if (!cat.length) { toast("Cadastre o catálogo de exames primeiro (aba Catálogo de exames)."); location.hash = "#catalogo"; return; }
   let itens = (x.exames || []).map(normEx).map((e) => ({ ...e }));
   let tipoReq = x.tipoReq || (itens.some(isPrest) ? "Imagem" : "Laboratorial");
-  const nomesProf = profs.map((p) => p.nome), vetIni = x.veterinario || meuProfissional(profs)?.nome || "";
+  const nomesProf = [...new Set([...EXECUTORES_IMAGEM, ...profs.map((p) => p.nome)])], vetIni = x.veterinario || meuProfissional(profs)?.nome || "";
   abrirModal(x.id ? "Editar solicitação de exame" : "Nova solicitação de exame", `
     <div class="duas"><label>Tipo da requisição<select name="tipoReq" id="tipoReq"><option ${tipoReq === "Laboratorial" ? "selected" : ""}>Laboratorial</option><option ${tipoReq === "Imagem" ? "selected" : ""}>Imagem</option></select></label>
     <label>Prioridade<select name="prioridade">${opts(["Rotina", "Urgente"], x.prioridade)}</select></label></div>
@@ -1779,14 +1780,15 @@ async function telaRelatorios(v, preset = "") {
 /* ================= CATÁLOGO DE EXAMES ================= */
 async function telaCatalogo(v) {
   const cat = (await getDocs(query(collection(db, "catalogoExames"), orderBy("nome")))).docs.map((d) => ({ id: d.id, ...d.data() }));
+  const custos = isMaster() ? Object.fromEntries((await getDocs(collection(db, "catalogoCustos"))).docs.map((d) => [d.id, d.data().valorLaboratorio])) : {};
   v.innerHTML = `<div class="barra"><h2>Catálogo de exames</h2>
     ${isMaster() && !cat.length ? `<button class="btn" id="seed">Importar sugestão inicial</button>` : ""}
     ${isMaster() ? `<button class="btn" id="impCat">Importar catálogo completo (JSON/CSV)</button><button class="btn" id="impC">Importar lista</button><button class="btn primary" id="novoC">+ Novo exame</button>` : ""}</div>
   <p class="muted small">Cada exame já fica ligado ao laboratório para onde vai. Ao escolher "Perfil renal — VETER" na solicitação, ele vai direto para o VETER. Um mesmo exame pode aparecer com dois laboratórios diferentes, se vocês usarem os dois. Os <b>pontos</b> são o que o membro da equipe ganha ao fazer a coleta.</p>
-  <table><thead><tr><th>Exame</th><th>Tipo</th><th>Laboratório</th><th>Pontos por coleta</th><th>Situação</th><th></th></tr></thead><tbody>
+  <table><thead><tr><th>Exame</th><th>Tipo</th><th>Laboratório</th>${isMaster() ? "<th>Valor lab.</th>" : ""}<th>Valor Vet Plus</th><th>Pontos por coleta</th><th>Situação</th><th></th></tr></thead><tbody>
   ${cat.map((c) => `<tr><td><b>${esc(c.nome)}</b></td><td>${esc(c.grupo)}</td><td>${isPrest(c) ? `<span class="muted">feito na clínica</span>` : `<span class="tag neutro">${esc(c.laboratorio)}</span>`}</td>
-    <td>${isPrest(c) ? "—" : c.pontos ?? 1}</td><td>${c.ativo !== false ? `<span class="tag ok">Ativo</span>` : `<span class="tag neutro">Inativo</span>`}</td>
-    <td>${isMaster() ? `<button class="btn small" data-e="${c.id}">Editar</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Catálogo vazio.</td></tr>`}</tbody></table>`;
+    ${isMaster() ? `<td>${custos[c.id] != null ? brl(custos[c.id]) : "—"}</td>` : ""}<td>${c.valor ? brl(c.valor) : "—"}</td><td>${isPrest(c) ? "—" : c.pontos ?? 1}</td><td>${c.ativo !== false ? `<span class="tag ok">Ativo</span>` : `<span class="tag neutro">Inativo</span>`}</td>
+    <td>${isMaster() ? `<button class="btn small" data-e="${c.id}">Editar</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">Catálogo vazio.</td></tr>`}</tbody></table>`;
   const modal = (c = {}) => abrirModal(c.id ? "Editar exame" : "Novo exame do catálogo", `
     <label>Nome do exame<input name="nome" required value="${esc(c.nome)}" placeholder="Ex.: Perfil renal"></label>
     <div class="duas"><label>Tipo<select name="grupo" id="cGr">${opts(["Laboratorial", "Imagem", "Prestador"], c.grupo)}</select></label>
@@ -1808,16 +1810,18 @@ async function telaCatalogo(v) {
         await addDoc(collection(db, "catalogoExames"), { nome, grupo: img ? (/^p/i.test(dest) ? "Prestador" : "Imagem") : "Laboratorial", laboratorio: img ? "" : dest.toUpperCase(), pontos: Number(pts) || 1, ativo: true }); }
       toast(`${linhas.length} exames importados.`);
     }, "Importar"));
-  $("#impCat") && ($("#impCat").onclick = () => abrirModal("Importar catálogo completo", `<p class="small">Escolha o arquivo <b>catalogo_exames.json</b> (ou o .csv). Exames com o mesmo nome e laboratório são atualizados (preço, tubos, prazo); os novos entram. O valor pago ao laboratório <b>não</b> é importado. Exames laboratoriais antigos, de lista sem preço, ficam inativos.</p><label>Arquivo<input type="file" name="arq" accept=".json,.csv" required></label>`,
+  $("#impCat") && ($("#impCat").onclick = () => abrirModal("Importar catálogo completo", `<p class="small">Escolha o arquivo <b>catalogo_exames.json</b> (ou o .csv). Exames com o mesmo nome e laboratório são atualizados (preço, tubos, prazo); os novos entram. Entra tudo: preço Vet Plus, <b>valor do laboratório (visível só ao Master)</b>, tubos, composição e prazo. Exames antigos (lista sem preço) e exames de imagem fora da lista inicial ficam inativos.</p><label>Arquivo<input type="file" name="arq" accept=".json,.csv" required></label>`,
     async (f, form) => {
       const novos = lerCatalogo(await form.arq.files[0].text()); if (!novos.length) throw new Error("Não encontrei exames no arquivo.");
       const ids = new Set(novos.map((n) => slugId(n.nome, n.laboratorio)));
-      for (let i = 0; i < novos.length; i += 400) { const b = writeBatch(db); novos.slice(i, i + 400).forEach((n) => b.set(doc(db, "catalogoExames", slugId(n.nome, n.laboratorio)), n)); await b.commit(); }
-      const velhos = cat.filter((c) => c.grupo === "Laboratorial" && !ids.has(c.id) && !c.tubos); // lista antiga (sem preço/tubos)
+      for (let i = 0; i < novos.length; i += 200) { const b = writeBatch(db);
+        novos.slice(i, i + 200).forEach((n) => { const { custo, ...pub } = n, id = slugId(n.nome, n.laboratorio);
+          b.set(doc(db, "catalogoExames", id), pub); b.set(doc(db, "catalogoCustos", id), { nome: n.nome, laboratorio: n.laboratorio, valorLaboratorio: custo || 0 }); }); await b.commit(); }
+      const imgIds = new Set(EXAMES_IMAGEM.map((n) => slugId(n, "imagem")));
+      const velhos = cat.filter((c) => c.ativo !== false && ((c.grupo === "Laboratorial" && !ids.has(c.id) && !c.tubos) || (isPrest(c) && !imgIds.has(c.id) && !EXAMES_IMAGEM.some((n) => norm(n) === norm(c.nome))))); // lista antiga
       for (let i = 0; i < velhos.length; i += 400) { const b = writeBatch(db); velhos.slice(i, i + 400).forEach((c) => b.update(doc(db, "catalogoExames", c.id), { ativo: false })); await b.commit(); }
-      const img = ["Aferição de pressão arterial", "Ultrassonografia abdominal", "Ultrassonografia de tórax", "Raio-X", "Eletrocardiograma", "Ecocardiograma"].filter((n) => !cat.some((c) => norm(c.nome) === norm(n)));
-      for (const n of img) await addDoc(collection(db, "catalogoExames"), { nome: n, grupo: "Imagem", laboratorio: "", pontos: 0, ativo: true });
-      catalogoCache = null; toast(`${novos.length} exames importados${velhos.length ? `, ${velhos.length} antigos desativados` : ""}${img.length ? `, ${img.length} de imagem adicionados` : ""}.`);
+      for (const n of EXAMES_IMAGEM) { const ja = cat.find((c) => isPrest(c) && norm(c.nome) === norm(n)); await setDoc(doc(db, "catalogoExames", ja?.id || slugId(n, "imagem")), { nome: n, grupo: "Imagem", laboratorio: "", pontos: 0, ativo: true }, { merge: true }); }
+      catalogoCache = null; toast(`${novos.length} exames importados (com valores do laboratório só para o Master)${velhos.length ? `, ${velhos.length} antigos desativados` : ""}. Imagem: ${EXAMES_IMAGEM.join(", ")}.`);
     }, "Importar"));
   $("#seed") && ($("#seed").onclick = async () => {
     for (const [nome, grupo, laboratorio] of CATALOGO_INICIAL) await addDoc(collection(db, "catalogoExames"), { nome, grupo, laboratorio, pontos: 1, ativo: true });

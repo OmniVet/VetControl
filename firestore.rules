@@ -75,6 +75,11 @@ service cloud.firestore {
       allow write: if master();
     }
 
+    // Valor pago ao laboratório (comparar com a cobrança do laboratório): só o master
+    match /catalogoCustos/{id} {
+      allow read, write: if master();
+    }
+
     match /pendencias/{id} {
       allow read, create: if ativo();
       allow update: if estoquista();
