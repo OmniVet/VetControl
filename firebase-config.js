@@ -20,6 +20,7 @@ export const DISTRIBUIDORAS = [
   "Veterinário",
   "Distribuidora Odontológica",
   "Especiais e Oncológicos",
+  "Distribuidora de Medicamentos Especiais",
   "Limpeza e Escritório",
   "Outros Custos"
 ];
@@ -29,10 +30,23 @@ export const SALAS = [
   { id: "imagem", nome: "Sala de Imagem" },
   { id: "internamento", nome: "Internamento" },
   { id: "centro_cirurgico", nome: "Centro Cirúrgico" },
+  { id: "instrumental", nome: "Sala de Instrumental Cirúrgico" },
+  { id: "limpeza_material", nome: "Sala de Limpeza de Material" },
   { id: "geladeira_vacina", nome: "Geladeira de Vacina" },
   { id: "geladeira_especiais", nome: "Geladeira de Medicamentos Especiais (quimioterápicos)" }
 ];
 export const DIAS_ALERTA_VALIDADE = 30;
+
+// Sugestão automática de estoque mínimo/ideal (análise das saídas dos últimos 90 dias, sem IA: conta simples e conferível)
+// Mínimo sugerido = consumo médio por dia × DIAS_COBERTURA_MINIMO (prazo de entrega + folga). Ideal = × DIAS_COBERTURA_IDEAL.
+export const DIAS_ANALISE = 90;
+export const DIAS_COBERTURA_MINIMO = 15;
+export const DIAS_COBERTURA_IDEAL = 30;
+
+// Busca automática de foto dos produtos (Google Programmable Search, busca de imagens: 100 buscas grátis por dia).
+// Chave: https://console.cloud.google.com/apis/library/customsearch.googleapis.com · Mecanismo (cx): https://programmablesearchengine.google.com (ative "Pesquisa de imagens" e "Pesquisar na web toda").
+export const GOOGLE_CSE_KEY = "";
+export const GOOGLE_CSE_CX = "";
 
 // Catálogo de exames (edite à vontade)
 // Grupo "Imagem": pede quem realizou e quem vai laudar. Demais grupos: pede o laboratório.
@@ -42,7 +56,7 @@ export const EXAMES = {
   "Fezes e urina": ["Coproparasitológico", "Urinálise"],
   "Citologia / outros": ["Citologia", "Histopatológico", "Cultura e antibiograma"]
 };
-export const LABORATORIOS = ["VETER", "LAFORVET", "TECSA", "LAB VETPLUS", "CDV", "LABMIL"];
+export const LABORATORIOS = ["VETER", "VETEX", "LIAN", "LAFORVET", "IFVET", "TECSA", "LAB VETPLUS", "CDV", "LABMIL"];
 export const CONVENIOS = ["Petlove", "PeTTOp", "A.pet", "Doglife"];
 // Sugestão inicial do catálogo (botão "Importar sugestão" na aba Catálogo). Depois tudo é editado pelo sistema.
 export const CATALOGO_INICIAL = [
@@ -104,3 +118,15 @@ export const DIAS_A_VENCER = 15;
 // Portal do tutor (login por CPF). Não precisa existir: é só o formato interno do login.
 export const DOMINIO_TUTOR = "tutor.vetcontrol.app";
 export const TIPOS_AMBULATORIO = ["Check-up", "Exame", "Consulta", "Medicação", "Curativo", "Retorno"];
+
+// Critérios da avaliação do time (notas de 1 a 5). A confirmar/editar pela gestão.
+export const CRITERIOS_AVALIACAO = ["Cumprimento da rotina", "Qualidade do trabalho", "Pontualidade e presença", "Trabalho em equipe", "Comunicação e atendimento", "Iniciativa e organização"];
+
+// Cargos. "clt: true" = entra na presença (ponto) e nas avaliações do time. Médicos veterinários são sempre PJ: ficam de fora.
+export const CARGOS = [
+  { id: "medico", nome: "Médico(a) veterinário(a) (PJ)", clt: false },
+  { id: "auxiliar", nome: "Auxiliar", clt: true },
+  { id: "gerente", nome: "Gerente", clt: true },
+  { id: "recepcao", nome: "Recepção", clt: true },
+  { id: "assistente", nome: "Assistente operacional", clt: true }
+];

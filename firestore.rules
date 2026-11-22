@@ -161,5 +161,46 @@ service cloud.firestore {
       allow read: if ativo();
       allow write: if master();
     }
+
+    // ===== NOSSO TIME =====
+    match /timeAtividades/{id} {
+      allow read: if ativo();
+      allow write: if master();
+    }
+    match /timeConclusoes/{id} {
+      allow read: if ativo();
+      allow create: if ativo() && (master() || request.resource.data.pessoaId == request.auth.uid);
+      allow delete: if ativo() && (master() || resource.data.pessoaId == request.auth.uid);
+      allow update: if false;
+    }
+    // Avaliações: SÓ o master lê e escreve
+    match /timeAvaliacoes/{id} {
+      allow read, write: if master();
+    }
+    // Confirmação/assinatura: o master cria; a própria pessoa só assina (uma vez); ninguém apaga
+    match /timeAssinaturas/{id} {
+      allow read: if master() || (ativo() && resource.data.pessoaId == request.auth.uid);
+      allow create: if master();
+      allow update: if ativo() && resource.data.pessoaId == request.auth.uid && resource.data.status == "Aguardando"
+        && request.resource.data.status == "Assinado" && request.resource.data.assinadoEm == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "assinadoEm", "hash"]);
+      allow delete: if false;
+    }
+    // Ponto: só criar (horário do servidor). Sem alterar nem apagar, para ninguém, nem o master.
+    match /timePonto/{id} {
+      allow read: if ativo() && (master() || resource.data.uid == request.auth.uid);
+      allow create: if ativo() && perfil().cargo in ["auxiliar", "gerente", "recepcao", "assistente"] && request.resource.data.uid == request.auth.uid && request.resource.data.em == request.time;
+      allow update, delete: if false;
+    }
+    match /timeCorrecoes/{id} {
+      allow read: if ativo() && (master() || resource.data.uid == request.auth.uid);
+      allow create: if ativo() && request.resource.data.uid == request.auth.uid && request.resource.data.status == "Pendente";
+      allow update: if master();
+      allow delete: if false;
+    }
+    match /timeConfig/{id} {
+      allow read: if ativo();
+      allow write: if master();
+    }
   }
 }

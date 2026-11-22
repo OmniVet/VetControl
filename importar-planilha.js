@@ -1,6 +1,11 @@
 // Lê a planilha "Controle_Estoque_e_Patrimonio.xlsx" da clínica (uma aba por categoria) e transforma em dados do sistema.
 // Entrada: { "Nome da aba": [[cabeçalho...], [linha...], ...] }. Não grava nada: só devolve o que será importado.
-const ABAS_PRODUTO = ["Hospitalar Humano", "Veterinário", "Distribuidora Odontológica", "Especiais e Oncológicos", "Limpeza e Escritório", "Outros Custos"];
+const ABAS_PRODUTO = ["Hospitalar Humano", "Veterinário", "Distribuidora Odontológica", "Especiais e Oncológicos", "Distribuidora de Medicamentos Especiais", "Limpeza e Escritório", "Outros Custos"];
+const ABAS_OPCIONAIS = ["Distribuidora de Medicamentos Especiais"]; // só avisa se faltar nas demais
+export const COLUNAS_MODELO = ["Código", "Tipo", "Subcategoria", "Nome comercial", "Princípio ativo", "Espécie indicada", "Marca / Fabricante", "Apresentação", "Concentração / Calibre", "Volume / Conteúdo", "Unidade", "Qtd. em estoque", "Estoque mínimo", "Estoque ideal", "Validade", "Lote (opcional)", "Localização", "Observações"];
+export const COLUNAS_SALAS = ["Sala", "Código", "Produto", "Ideal na sala", "Crítico (repor quando ≤)", "Categoria", "Unidade", "Controlado", "Observações", "Qtd. atual na sala"];
+// O Excel limita o nome da aba a 31 letras: "Medicamentos Especiais" vale como "Distribuidora de Medicamentos Especiais".
+export const NOME_ABA = { "Distribuidora de Medicamentos Especiais": "Medicamentos Especiais" };
 const MEDIDA = { unidade: "Unidade", un: "Unidade", ampola: "Ampola", rolo: "Rolo", pacote: "Pacote", "frasco-ampola": "Frasco-ampola", frasco: "Frasco", caixa: "Caixa", cx: "Caixa",
   galao: "Galão", "bag / galao": "Galão", "bolsa / frasco": "Bolsa", bolsa: "Bolsa", flaconete: "Flaconete", l: "Litro", litro: "Litro", ml: "Frasco", saco: "Saco", kit: "Kit" };
 // Princípios sujeitos a controle especial (Portaria 344): marcados automaticamente, conferir.
@@ -20,22 +25,29 @@ function objetos(linhas) {
 
 export function lerPlanilhaClinica(abas) {
   const produtos = [], inventario = [], avisos = [];
+  // Aba "Salas" (modelo do VetControl): o que cada sala/setor deve ter. Sala | Código | Produto | Ideal na sala | Crítico
+  const salas = objetos(abas["Salas"] || []).filter((r) => !ehExemplo(r["Observações"]) && (txt(r["Código"]) || txt(r["Produto"]))).map((r) => ({
+    sala: txt(r["Sala"]), codigo: txt(r["Código"]), produto: txt(r["Produto"]), ideal: numero(r["Ideal na sala"]) || 0, critico: numero(r["Crítico (repor quando ≤)"]) || 0, atual: numero(r["Qtd. atual na sala"]) || 0,
+    // Só usados quando o produto ainda não existe no cadastro (ele é criado com saldo zero)
+    categoria: ABAS_PRODUTO.find((a) => semAcento(a) === semAcento(r["Categoria"])) || "Hospitalar Humano", medida: MEDIDA[semAcento(r["Unidade"])] || "Unidade",
+    controlado: /^s/i.test(txt(r["Controlado"])) || CONTROLADOS.test(txt(r["Produto"])), obs: txt(r["Observações"]), naoComprar: /evitar comprar|n[aã]o comprar/i.test(txt(r["Observações"])) }));
   for (const aba of ABAS_PRODUTO) {
-    if (!abas[aba]) { avisos.push(`Aba "${aba}" não encontrada.`); continue; }
-    for (const r of objetos(abas[aba])) {
+    const chave = abas[aba] ? aba : abas[NOME_ABA[aba]] ? NOME_ABA[aba] : null;
+    if (!chave) { if (!ABAS_OPCIONAIS.includes(aba)) avisos.push(`Aba "${aba}" não encontrada.`); continue; }
+    for (const r of objetos(abas[chave])) {
       const obs = txt(r["Observações"]); if (ehExemplo(obs)) continue;
       const nome = txt(r["Nome comercial"] || r["Produto"] || r["Item"]); if (!nome) continue;
       const principio = txt(r["Princípio ativo"]);
       const apres = semAcento(r["Apresentação"]), unid = semAcento(r["Unidade"]);
       const qtd = numero(r["Qtd. em estoque"]) || 0, validade = dataIso(r["Validade"] || r["Validade (se houver)"]);
-      const minimo = numero(r["Estoque mínimo"]) || 0;
+      const minimo = numero(r["Estoque mínimo"]) || 0, idealPlan = numero(r["Estoque ideal"]) || 0;
       const controlado = CONTROLADOS.test(principio + " " + nome);
       produtos.push({
         codigo: txt(r["Código"]), nome, categoria: aba, subcategoria: txt(r["Subcategoria"] || r["Tipo"] || r["Categoria"]), tipoItem: txt(r["Tipo"]),
         principio, especie: txt(r["Espécie indicada"]), marca: txt(r["Marca / Fabricante"] || r["Marca"]),
         medida: MEDIDA[apres] || MEDIDA[unid] || "Unidade", concentracao: txt(r["Concentração / Calibre"]), conteudo: [txt(r["Volume / Conteúdo"] || r["Volume / Tamanho"] || r["Tamanho / Conteúdo"]), txt(r["Unidade"])].filter(Boolean).join(" "),
         localizacao: txt(r["Localização"]), obs, controlado, controladoAuto: controlado,
-        minimo, ideal: minimo ? minimo * 2 : 0, tipo: "estoque", qtdInicial: qtd, validadeInicial: validade, loteInicial: txt(r["Lote (opcional)"]),
+        minimo, ideal: idealPlan || (minimo ? minimo * 2 : 0), tipo: "estoque", qtdInicial: qtd, validadeInicial: validade, loteInicial: txt(r["Lote (opcional)"]),
         valorUnit: numero(r["Valor unitário"]) || 0, naoComprar: false,
       });
     }
@@ -75,5 +87,5 @@ export function lerPlanilhaClinica(abas) {
   const grupos = Object.values(porPrincipio).filter((l) => l.length > 1).map((l) => ({
     principio: l[0].principio, forma: l[0].subcategoria, concentracao: l[0].concentracao, semEquivalente: false, obs: "Criado da planilha: confirme o que é troca direta.",
     itens: l.map((p) => ({ codigo: p.codigo, nome: p.nome, fabricante: p.marca, concentracao: p.concentracao || p.conteudo, relacao: relacao(p, l[0]) ? "ressalva" : "identico", ressalva: relacao(p, l[0]), produtoId: "", fotoUrl: "", preferencial: false })) }));
-  return { produtos, inventario, compras, grupos, avisos };
+  return { produtos, inventario, compras, grupos, salas, avisos };
 }

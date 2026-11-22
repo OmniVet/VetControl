@@ -2,8 +2,13 @@ import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, orderBy, runTransaction, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { cartaoHtml, CARTAO_CSS, rotulo } from "./cartao.js";
-import { lerPlanilhaClinica } from "./importar-planilha.js";
-import { firebaseConfig, MASTER_EMAIL, DISTRIBUIDORAS, MEDIDAS, SALAS, DIAS_ALERTA_VALIDADE, EXAMES, STATUS_EXAME, STATUS_REPOSICAO, INV_CATEGORIAS, INV_LOCAIS, INV_ESTADO, LABORATORIOS, CONVENIOS, ORIGENS, CLINICA, DIAS_SEM_USO, VACINAS, VACINAS_COMERCIAIS, DIAS_A_VENCER, DOMINIO_TUTOR, TIPOS_AMBULATORIO, TABELAS_PRECO, CATEGORIAS_SERVICO, VALIDADE_ORCAMENTO_DIAS, CATALOGO_INICIAL, GEMINI_API_KEY, GEMINI_MODEL } from "./firebase-config.js";
+import { iniciarTime } from "./time.js";
+import { CARGOS, CRITERIOS_AVALIACAO } from "./firebase-config.js";
+import { GRUPOS_MERCADO } from "./equivalencias-mercado.js";
+import { lerPlanilhaClinica, COLUNAS_MODELO, COLUNAS_SALAS, NOME_ABA } from "./importar-planilha.js";
+import { DADOS_EXAMES } from "./dados-exames.js";
+import { resolverCombinacoes, calcularTubos, textoTubos, TUBOS } from "./busca-exames.js";
+import { firebaseConfig, MASTER_EMAIL, DISTRIBUIDORAS, MEDIDAS, SALAS, DIAS_ALERTA_VALIDADE, EXAMES, STATUS_EXAME, STATUS_REPOSICAO, INV_CATEGORIAS, INV_LOCAIS, INV_ESTADO, LABORATORIOS, CONVENIOS, ORIGENS, CLINICA, DIAS_SEM_USO, VACINAS, VACINAS_COMERCIAIS, DIAS_A_VENCER, DOMINIO_TUTOR, TIPOS_AMBULATORIO, TABELAS_PRECO, CATEGORIAS_SERVICO, VALIDADE_ORCAMENTO_DIAS, CATALOGO_INICIAL, GEMINI_API_KEY, GEMINI_MODEL, DIAS_ANALISE, DIAS_COBERTURA_MINIMO, DIAS_COBERTURA_IDEAL, GOOGLE_CSE_KEY, GOOGLE_CSE_CX } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -101,6 +106,8 @@ function fecharModal() { $("#modal").classList.add("hidden"); }
 $("#modalCancelar").onclick = fecharModal;
 const opts = (arr, sel) => arr.map((o) => { const v = typeof o === "string" ? o : o.id, t = typeof o === "string" ? o : o.nome; return `<option value="${esc(v)}" ${v === sel ? "selected" : ""}>${esc(t)}</option>`; }).join("");
 
+const TIME = iniciarTime({ db, fb: { collection, doc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, serverTimestamp }, $, esc, toast: (t) => toast(t), abrirModal, opts, hoje, eu: () => usuario, isMaster: () => isMaster(), docImpressao: (...a) => docImpressao(...a), sha256: (t) => sha256(t), entrarComSenha: (e, s) => signInWithEmailAndPassword(auth, e, s), CRITERIOS: CRITERIOS_AVALIACAO, cltDe: (u) => !!CARGOS.find((x) => x.id === u.cargo)?.clt, CLINICA_NOME: CLINICA.nome });
+
 /* ================= AUTENTICAÇÃO ================= */
 $("#loginForm").onsubmit = async (e) => {
   e.preventDefault(); const f = new FormData(e.target);
@@ -161,19 +168,29 @@ onAuthStateChanged(auth, async (u) => {
 window.addEventListener("hashchange", render);
 // Setores do Início (quadrados grandes). abas: [rota, nome]
 const SETORES = [
-  { id: "solic", n: "1", titulo: "Solicitação de exames", icone: "🧪", abas: [["nova-solicitacao", "1.1 Nova solicitação de exames"], ["exames", "1.2 Consultar solicitações realizadas"]] },
-  { id: "laudos", n: "2", titulo: "Laudos", icone: "📝", abas: [["laudos-pendentes", "2.1 Liberar laudos"], ["modelos", "2.2 Modelos de laudos"], ["laudos-liberados", "2.3 Consultar laudos liberados"]] },
-  { id: "historico", n: "3", titulo: "Histórico de exames", icone: "📊", abas: [["planilha", "Exames laboratoriais"], ["prestadores", "Imagem e prestadores"], ["producao", "Produção por médico (semana)"], ["comparativo", "Comparativo com laboratório"], ["exportar-exames", "Exportar relatórios de exames"]] },
-  { id: "compras", n: "4", titulo: "Solicitação de compras", icone: "🛒", abas: [["solicitacoes", "Pedir algo ao estoquista"]] },
-  { id: "relatorios", n: "5", titulo: "Relatórios gerais", icone: "📈", abas: [["relatorios", "Gerador de relatórios"]] },
-  { id: "estoque", n: "9", titulo: "Estoque", icone: "📦", abas: [["produtos", "9.1 Estoque geral"], ["limbo", "9.2 Limbo"], ["pedido", "9.3 Detalhes de pedido"], ["pendencias", "Pendências"], ["nfe", "Receber nota (XML)"], ["alertas", "Alertas"], ["equivalentes", "Medicamentos equivalentes"], ["cotacao", "Cotação"]] },
-  { id: "reposicao", n: "", titulo: "Reposição por setor", icone: "🏥", abas: [["salas", "Salas, geladeiras e setores"]] },
-  { id: "inventario", n: "", titulo: "Inventário (patrimônio)", icone: "🪑", abas: [["inventario", "Equipamentos e móveis"]] },
-  { id: "config", n: "", titulo: "Configurações", icone: "⚙️", master: true, abas: [["usuarios", "Usuários"], ["fornecedores", "Fornecedores"], ["profissionais", "Profissionais"], ["catalogo", "Catálogo de exames"]] },
+  { id: "solic", mod: "exames", n: "1", titulo: "Solicitação de exames", icone: "🧪", abas: [["nova-solicitacao", "1.1 Nova solicitação de exames"], ["exames", "1.2 Consultar solicitações realizadas"], ["busca-exames", "1.3 Busca inteligente (menor preço)"]] },
+  { id: "laudos", mod: "exames", n: "2", titulo: "Laudos", icone: "📝", abas: [["laudos-pendentes", "2.1 Liberar laudos"], ["modelos", "2.2 Modelos de laudos"], ["laudos-liberados", "2.3 Consultar laudos liberados"]] },
+  { id: "historico", mod: "exames", n: "3", titulo: "Histórico de exames", icone: "📊", abas: [["planilha", "Exames laboratoriais"], ["prestadores", "Imagem e prestadores"], ["producao", "Produção por médico (semana)"], ["comparativo", "Comparativo com laboratório"], ["exportar-exames", "Exportar relatórios de exames"]] },
+  { id: "compras", mod: "estoque", n: "4", titulo: "Solicitação de compras", icone: "🛒", abas: [["solicitacoes", "Pedir algo ao estoquista"]] },
+  { id: "relatorios", mod: "geral", n: "5", titulo: "Relatórios gerais", icone: "📈", abas: [["relatorios", "Gerador de relatórios"]] },
+  { id: "estoque", mod: "estoque", n: "9", titulo: "Estoque", icone: "📦", abas: [["produtos", "9.1 Estoque geral"], ["limbo", "9.2 Limbo"], ["pedido", "9.3 Detalhes de pedido"], ["pendencias", "Pendências"], ["nfe", "Receber nota (XML)"], ["alertas", "Alertas"], ["equivalentes", "Medicamentos equivalentes"], ["cotacao", "Cotação"]] },
+  { id: "reposicao", mod: "estoque", n: "", titulo: "Reposição por setor", icone: "🏥", abas: [["salas", "Salas, geladeiras e setores"], ["ficha", "Ficha de reposição"], ["semanal", "Relatório semanal de reposição"]] },
+  { id: "inventario", mod: "estoque", n: "", titulo: "Inventário (patrimônio)", icone: "🪑", abas: [["inventario", "Equipamentos e móveis"]] },
+  { id: "config", mod: "geral", n: "", titulo: "Configurações", icone: "⚙️", master: true, abas: [["usuarios", "Usuários"], ["fornecedores", "Fornecedores"], ["profissionais", "Profissionais"], ["catalogo", "Catálogo de exames"]] },
   // Módulos que vão virar um sistema próprio (continuam funcionando aqui enquanto isso)
-  { id: "vacinas", n: "6", titulo: "Vacinas", icone: "💉", outro: true, abas: [["vacinas", "Situação das vacinas"], ["vencimentos", "Vencimentos"], ["pets", "Pets e cartões"]] },
-  { id: "ambulatorio", n: "7", titulo: "Ambulatório", icone: "🩺", outro: true, abas: [["ambulatorio", "Roteiro"]] },
-  { id: "orcamentos", n: "8", titulo: "Orçamentos", icone: "💰", outro: true, abas: [["orcamentos", "8.1 Histórico de orçamentos"], ["orcamento", "8.2 Novo orçamento"], ["servicos", "8.3 Banco de serviços"], ["pacotes", "Pacotes"]] },
+  { id: "vacinas", mod: "ambul", n: "6", titulo: "Vacinas", icone: "💉", abas: [["vacinas", "Situação das vacinas"], ["vencimentos", "Vencimentos"], ["pets", "Pets e cartões"]] },
+  { id: "ambulatorio", mod: "ambul", n: "7", titulo: "Ambulatório", icone: "🩺", abas: [["ambulatorio", "Roteiro"]] },
+  { id: "orcamentos", mod: "ambul", n: "8", titulo: "Orçamentos", icone: "💰", abas: [["orcamentos", "8.1 Histórico de orçamentos"], ["orcamento", "8.2 Novo orçamento"], ["servicos", "8.3 Banco de serviços"], ["pacotes", "Pacotes"]] },
+  { id: "time-agenda", mod: "time", n: "", titulo: "Agenda de atividades do time", icone: "📋", abas: [["time-agenda", "Agenda de atividades"]] },
+  { id: "time-relatorios", mod: "time", n: "", titulo: "Relatórios e histórico do time", icone: "📑", abas: [["time-relatorios", "Relatórios, avaliações e assinaturas"]] },
+  { id: "time-presenca", mod: "time", n: "", titulo: "Presença do time", icone: "⏱", abas: [["time-presenca", "Registro e espelho de presença"]] },
+];
+const MODULOS = [
+  { id: "exames", titulo: "Módulo Exames", sub: "Exames, Laudos e Histórico de Exames", icone: "🧪" },
+  { id: "estoque", titulo: "Módulo Estoque e Compras", sub: "Estoque, Inventário, Compras e Reposição por setor", icone: "📦" },
+  { id: "ambul", titulo: "Módulo Ambulatorial e Recepção", sub: "Vacinação, Ambulatorial e Orçamentos", icone: "🩺" },
+  { id: "time", titulo: "Módulo Nosso time", sub: "Agenda de atividades, relatórios/avaliações e presença", icone: "👥" },
+  { id: "geral", titulo: "Geral", sub: "Relatórios gerais e configurações", icone: "⚙️" }
 ];
 async function render() {
   if (!usuario) return;
@@ -183,33 +200,34 @@ async function render() {
     <div class="setor-abas">${sec.abas.map(([r, n]) => `<a href="#${r}" class="${r === rota ? "ativo" : ""}">${n}</a>`).join("")}</div>` : "";
   atualizarBadge();
   const v = $("#view"); v.innerHTML = `<p class="muted">Carregando…</p>`;
-  const telas = { "nova-solicitacao": telaNovaSolicitacao, "laudos-pendentes": telaLaudosPendentes, "laudos-liberados": telaLaudosLiberados, producao: telaProducao, "exportar-exames": (v) => telaRelatorios(v, "exames"),
-    equivalentes: telaEquivalentes, vencimentos: telaVencimentos, vacinas: telaVacinas, pets: telaPets, ambulatorio: telaAmbulatorio, orcamento: telaOrcamento, orcamentos: telaOrcamentos, servicos: telaServicos, pacotes: telaPacotes, prestadores: (v) => telaPlanilha(v, "prest"), comparativo: telaComparativo, modelos: telaModelos, limbo: telaLimbo, pendencias: telaPendencias, planilha: telaPlanilha, catalogo: telaCatalogo, painel: telaPainel, alertas: telaAlertas, profissionais: telaProfissionais, cotacao: telaCotacao, inventario: telaInventario, nfe: telaNfe, solicitacoes: telaSolicitacoes, exames: telaExames, produtos: telaProdutos, salas: telaSalas, pedido: telaPedido, relatorios: telaRelatorios, fornecedores: telaFornecedores, usuarios: telaUsuarios };
+  const telas = { "nova-solicitacao": telaNovaSolicitacao, "busca-exames": telaBuscaExames, "laudos-pendentes": telaLaudosPendentes, "laudos-liberados": telaLaudosLiberados, producao: telaProducao, "exportar-exames": (v) => telaRelatorios(v, "exames"),
+    ...TIME, equivalentes: telaEquivalentes, vencimentos: telaVencimentos, vacinas: telaVacinas, pets: telaPets, ambulatorio: telaAmbulatorio, orcamento: telaOrcamento, orcamentos: telaOrcamentos, servicos: telaServicos, pacotes: telaPacotes, prestadores: (v) => telaPlanilha(v, "prest"), comparativo: telaComparativo, modelos: telaModelos, limbo: telaLimbo, pendencias: telaPendencias, planilha: telaPlanilha, catalogo: telaCatalogo, painel: telaPainel, alertas: telaAlertas, profissionais: telaProfissionais, cotacao: telaCotacao, inventario: telaInventario, nfe: telaNfe, solicitacoes: telaSolicitacoes, exames: telaExames, produtos: telaProdutos, salas: telaSalas, ficha: telaFicha, semanal: telaSemanal, pedido: telaPedido, relatorios: telaRelatorios, fornecedores: telaFornecedores, usuarios: telaUsuarios };
   try { await (telas[rota] || telaPainel)(v); } catch (e) { v.innerHTML = `<p class="erro">Erro: ${esc(e.message)}</p>`; console.error(e); }
   window.scrollTo(0, 0);
 }
 
 /* ================= ESTOQUE / PRODUTOS ================= */
 async function telaProdutos(v) {
-  await Promise.all([carregarProdutos(), carregarPedidoAberto(), carregarEquivalencias()]);
+  await Promise.all([carregarProdutos(), carregarPedidoAberto(), carregarEquivalencias()]); await carregarSugestoes().catch((e) => console.warn("Sugestões indisponíveis:", e));
   v.innerHTML = `
   <div class="barra"><h2>Estoque central</h2>
     <input id="busca" placeholder="Buscar nome, princípio ativo, código…" />
     <select id="fCat"><option value="">Todas as distribuidoras</option>${opts(DISTRIBUIDORAS)}</select>
     ${podeConfirmar() ? `<button class="btn" id="btnVencidos">Mover vencidos ao limbo</button>` : ""}
-    ${isMaster() ? `<button class="btn" id="btnPlan">📥 Importar planilha da clínica</button><button class="btn" id="btnImport">Colar lista</button>` : ""}
+    ${podeConfirmar() ? `<button class="btn" id="btnPlan">📥 Importar planilha</button>` : ""}${isMaster() ? `<button class="btn" id="btnImport">Colar lista</button>` : ""}
+    ${podeConfirmar() ? `<button class="btn" id="btnFotos">🖼 Buscar fotos</button><button class="btn" id="btnSug" title="Aplica o mínimo e o ideal sugeridos nos produtos com histórico suficiente">📊 Aplicar sugestões</button>` : ""}
     <button class="btn primary" id="btnNovo">+ Novo produto</button></div>
   <p class="muted small">Contagem do <b>estoque central</b> apenas. As salas/setores e o limbo têm contagens próprias nas outras abas.${podeConfirmar() ? "" : " Suas entradas e retiradas ficam <b>pendentes</b> até a estoquista confirmar."}</p>
-  <div class="tabela-wrap"><table><thead><tr><th></th><th>Produto</th><th>Distribuidora</th><th>Medida</th><th>Tipo</th><th>No estoque / validade</th><th>Ideal</th><th>Mín.</th><th>Status</th><th>Ações</th></tr></thead><tbody id="tb"></tbody></table></div>`;
+  <div class="tabela-wrap"><table><thead><tr><th></th><th>Produto</th><th>Distribuidora</th><th>Medida</th><th>Tipo</th><th>No estoque / validade</th><th>Ideal</th><th>Mín.</th><th>Sugestão (últimos ${DIAS_ANALISE} dias)</th><th>Status</th><th>Ações</th></tr></thead><tbody id="tb"></tbody></table></div>`;
   const desenhar = () => {
     const b = $("#busca").value.toLowerCase(), c = $("#fCat").value;
-    $("#tb").innerHTML = produtos.filter((p) => (!b || `${p.nome} ${p.marca || ""} ${p.principio || ""} ${p.codigo || ""} ${p.subcategoria || ""}`.toLowerCase().includes(b)) && (!c || p.categoria === c)).map((p) => `
+    $("#tb").innerHTML = produtos.filter((p) => (!b || `${p.nome} ${p.marca || ""} ${p.principio || ""} ${p.codigo || ""} ${p.subcategoria || ""} ${textoEquiv(p)}`.toLowerCase().includes(b)) && (!c || p.categoria === c)).map((p) => `
       <tr><td>${fotoTag(p)}</td>
       <td><b>${esc(p.nome)}</b>${p.controlado ? ` <span class="tag critico">🔒 Controlado</span>` : ""}${p.naoComprar ? ` <span class="tag critico" title="${esc(p.naoComprarMotivo || "")}">🚫 Não comprar</span>` : ""}<div class="muted small">${esc([p.codigo, p.principio, p.marca, p.subcategoria].filter(Boolean).join(" · "))}</div>${p.naoComprar && p.naoComprarMotivo ? `<div class="small" style="color:var(--vermelho)">${esc(p.naoComprarMotivo)}</div>` : ""}${equivResumo(p)}</td>
       <td>${esc(p.categoria)}</td><td>${esc(p.medida)}</td>
       <td>${p.tipo === "consumo" ? `<span class="tag neutro">Setor (consumo)</span>` : `<span class="tag neutro">Estoque</span>`}</td>
       <td><b>${total(p.lotesEstoque)}</b>${lotesHtml(p.lotesEstoque)}</td>
-      <td>${p.ideal ?? ""}</td><td>${p.minimo ?? ""}</td><td>${p.naoComprar ? `<span class="tag neutro">Não repor</span>` : statusEstoque(p)}</td>
+      <td>${p.ideal ?? ""}</td><td>${p.minimo ?? ""}</td><td class="sug">${sugestaoHtml(p)}</td><td>${p.naoComprar ? `<span class="tag neutro">Não repor</span>` : statusEstoque(p)}</td>
       <td class="acoes-linha">
         <button class="btn small" data-a="entrada" data-id="${p.id}">+ Entrada</button>
         <button class="btn small" data-a="baixa" data-id="${p.id}">Retirar p/ setor</button>
@@ -217,18 +235,20 @@ async function telaProdutos(v) {
         ${p.naoComprar ? "" : `<button class="btn small" data-a="pedir" data-id="${p.id}">🛒 Incluir no pedido${pedidoAberto[p.id] ? ` <b>(${pedidoAberto[p.id]})</b>` : ""}</button>`}
         ${podeConfirmar() ? `<button class="btn small" data-a="editar" data-id="${p.id}">Editar</button>` : ""}
         ${isMaster() ? `<button class="btn small danger" data-a="excluir" data-id="${p.id}">Excluir</button>` : ""}
-      </td></tr>`).join("") || `<tr><td colspan="10" class="muted">Nenhum produto.</td></tr>`;
+      </td></tr>`).join("") || `<tr><td colspan="11" class="muted">Nenhum produto.</td></tr>`;
   };
   desenhar(); $("#busca").oninput = desenhar; $("#fCat").onchange = desenhar;
   $("#btnNovo").onclick = () => modalProduto();
   $("#btnVencidos") && ($("#btnVencidos").onclick = moverVencidosLimbo);
   $("#btnImport") && ($("#btnImport").onclick = modalImportarProdutos);
   $("#btnPlan") && ($("#btnPlan").onclick = modalImportarPlanilhaClinica);
+  $("#btnFotos") && ($("#btnFotos").onclick = modalBuscarFotos);
+  $("#btnSug") && ($("#btnSug").onclick = aplicarSugestoesEmLote);
   $("#tb").onclick = (e) => {
     const eq = e.target.closest("[data-eq]"); if (eq) return verGrupoEquiv(eq.dataset.eq);
     const b = e.target.closest("button"); if (!b) return; const p = produtos.find((x) => x.id === b.dataset.id);
     ({ entrada: modalEntrada, baixa: modalBaixa, limbo: modalLimbo, editar: modalProduto, excluir: excluirProduto,
-       pedir: modalIncluirPedido })[b.dataset.a](p);
+       pedir: modalIncluirPedido, aplicarSug: aplicarSugestao })[b.dataset.a](p);
   };
 }
 
@@ -237,6 +257,7 @@ function modalProduto(p = {}) {
     <div class="duas"><label>Foto (arquivo ou câmera)<input type="file" name="foto" accept="image/*" capture="environment"></label>
     <label>…ou link da imagem <a href="#" id="buscaFoto" class="small">🔎 Buscar foto no Google</a><input name="fotoUrl" id="fotoUrl" value="${esc(p.fotoUrl)}" placeholder="Cole aqui o endereço da imagem"></label></div>
     <img id="fotoPrev" class="foto ${fotoSrc(p) ? "" : "hidden"}" src="${esc(fotoSrc(p))}" style="width:80px;height:80px">
+    ${p.fotoAuto ? `<p class="small muted">📷 Foto sugerida automaticamente: confira se é o produto certo (marca e apresentação).</p>` : ""}
     <label>Nome do produto<input name="nome" required value="${esc(p.nome)}" placeholder="Ex.: Cateter Nº 22 (Azul)"></label>
     <div class="duas">
       <label>Categoria (distribuidora)<select name="categoria">${opts(DISTRIBUIDORAS, p.categoria)}</select></label>
@@ -259,6 +280,7 @@ function modalProduto(p = {}) {
     const dados = { nome: f.nome.trim(), categoria: f.categoria, medida: f.medida, marca: f.marca.trim(), tipo: f.tipo, ideal: Number(f.ideal), minimo: Number(f.minimo),
       fotoUrl: f.fotoUrl.trim(), controlado: !!f.controlado, naoComprar: !!f.naoComprar, naoComprarMotivo: f.naoComprar ? f.naoComprarMotivo.trim() : "", atualizadoEm: serverTimestamp() };
     const arq = form.foto.files[0]; if (arq) dados.foto = await comprimirFoto(arq); else if (dados.fotoUrl) dados.foto = "";
+    if (arq || dados.fotoUrl !== (p.fotoUrl || "")) dados.fotoAuto = false;
     if (p.id) { await updateDoc(doc(db, "produtos", p.id), dados); toast("Produto atualizado."); return; }
     const q = Number(f.qtdInicial || 0);
     if (q > 0 && !f.valInicial) throw new Error("Informe a validade da quantidade inicial.");
@@ -469,6 +491,181 @@ function ordemGeladeira(lotes = []) {
   return `<div class="ordem-gel">${l.map((x, i) => `<div>${i === 0 ? "⬆ em cima" : i === l.length - 1 ? "⬇ embaixo" : "↕ meio"}: <b>${x.qtd}</b> · val. ${fmtData(x.validade)}</div>`).join("")}</div>`;
 }
 
+/* ================= SUGESTÃO DE ESTOQUE MÍNIMO / IDEAL (últimos 90 dias) ================= */
+// Conta simples e conferível, sem IA: consumo médio por dia × dias de cobertura (ajuste em firebase-config.js).
+// "Saída" do estoque central = reposição para uma sala (produto de estoque) ou consumo (produto de setor).
+let sugestoes = {}, sugestoesEm = 0;
+async function carregarSugestoes(forcar = false) {
+  if (!forcar && Date.now() - sugestoesEm < 10 * 60 * 1000) return sugestoes;
+  const ini = Timestamp.fromDate(new Date(Date.now() - DIAS_ANALISE * 864e5));
+  const movs = (await getDocs(query(collection(db, "movimentos"), where("data", ">=", ini)))).docs.map((d) => d.data());
+  const porProd = {}; movs.forEach((m) => { if (m.produtoId) (porProd[m.produtoId] ??= []).push(m); });
+  sugestoes = {};
+  for (const p of produtos) {
+    const saidas = (porProd[p.id] || []).filter((m) => m.tipo === "reposicao" || (m.tipo === "consumo" && p.tipo === "consumo"));
+    const qtd = saidas.reduce((t, m) => t + Number(m.qtd || 0), 0); if (!qtd) continue;
+    const vida = p.criadoEm?.toDate ? Math.ceil((Date.now() - p.criadoEm.toDate()) / 864e5) : DIAS_ANALISE;
+    const janela = Math.min(DIAS_ANALISE, Math.max(30, vida)), diario = qtd / janela, min = Math.max(1, Math.ceil(diario * DIAS_COBERTURA_MINIMO));
+    sugestoes[p.id] = { qtd, janela, diario, min, ideal: Math.max(min + 1, Math.ceil(diario * DIAS_COBERTURA_IDEAL)), confiavel: janela >= 60 && saidas.length >= 4 };
+  }
+  sugestoesEm = Date.now(); return sugestoes;
+}
+function sugestaoHtml(p) {
+  const g = sugestoes[p.id]; if (!g) return `<span class="muted small">sem saídas registradas</span>`;
+  const dif = !p.minimo || Math.abs(g.min - p.minimo) / p.minimo > 0.3;
+  const seta = p.minimo && g.min > p.minimo * 1.3 ? ` <span class="tag alerta">↑ subir</span>` : p.minimo && g.min < p.minimo * 0.7 ? ` <span class="tag neutro">↓ reduzir</span>` : "";
+  return `<div>mín. <b>${g.min}</b> · ideal <b>${g.ideal}</b>${seta}</div><div class="muted small">saíram ${g.qtd} em ${g.janela} dias (${g.diario.toFixed(1).replace(".", ",")}/dia)${g.confiavel ? "" : " · poucos dados"}</div>${podeConfirmar() && dif ? `<button class="btn small" data-a="aplicarSug" data-id="${p.id}">Aplicar</button>` : ""}`;
+}
+async function aplicarSugestao(p) {
+  const g = sugestoes[p.id]; if (!g) return;
+  await updateDoc(doc(db, "produtos", p.id), { minimo: g.min, ideal: g.ideal, sugestaoAplicadaEm: serverTimestamp() });
+  sugestoesEm = 0; toast(`${p.nome}: mínimo ${g.min}, ideal ${g.ideal}.`); render();
+}
+async function aplicarSugestoesEmLote() {
+  const alvo = produtos.filter((p) => sugestoes[p.id]?.confiavel && !p.naoComprar && sugestoes[p.id].min !== Number(p.minimo || 0));
+  if (!alvo.length) return toast("Nenhum produto com histórico suficiente (60+ dias e 4+ saídas) para ajustar.");
+  if (!confirm(`Ajustar mínimo e ideal de ${alvo.length} produto(s) que têm histórico suficiente?`)) return;
+  for (const p of alvo) await updateDoc(doc(db, "produtos", p.id), { minimo: sugestoes[p.id].min, ideal: sugestoes[p.id].ideal, sugestaoAplicadaEm: serverTimestamp() });
+  sugestoesEm = 0; toast(`${alvo.length} produto(s) ajustados.`); render();
+}
+
+/* ================= FOTOS AUTOMÁTICAS DOS PRODUTOS (Google Programmable Search, imagens) ================= */
+function modalBuscarFotos() {
+  const sem = produtos.filter((p) => !fotoSrc(p) && !p.fotoTentada);
+  if (!GOOGLE_CSE_KEY || !GOOGLE_CSE_CX) return abrirModal("🖼 Buscar fotos automaticamente", `<p><b>${sem.length}</b> produto(s) sem foto. Para o sistema buscar sozinho falta ligar a busca de imagens do Google (grátis, 100 buscas por dia): preencha <code>GOOGLE_CSE_KEY</code> e <code>GOOGLE_CSE_CX</code> no <b>firebase-config.js</b> (passo a passo no README).</p>
+    <p class="small muted">Enquanto isso, dentro de cada produto existe o botão <b>🔎 Buscar foto no Google</b>.</p>`, async () => {}, "Entendi");
+  abrirModal("🖼 Buscar fotos automaticamente", `<p><b>${sem.length}</b> produto(s) ainda sem foto. O Google libera cerca de 100 buscas grátis por dia: se tiver mais, repita amanhã.</p>
+    <label>Quantos buscar agora<input type="number" name="n" min="1" max="100" value="${Math.min(90, sem.length) || 1}"></label>
+    <p id="fotoProg" class="small"></p><p class="small muted">A busca pode errar marca ou apresentação: as fotos automáticas ficam marcadas em "Editar produto" para você conferir.</p>`,
+  async (f) => { if (!sem.length) throw new Error("Todos os produtos já têm foto."); await buscarFotosAuto(sem.slice(0, Math.max(1, Number(f.n)))); }, "Buscar");
+}
+async function buscarFotosAuto(lista) {
+  let ok = 0, vazio = 0;
+  for (const [i, p] of lista.entries()) {
+    $("#fotoProg") && ($("#fotoProg").textContent = `Buscando ${i + 1} de ${lista.length}: ${p.nome}`);
+    const q = [p.nome, p.marca].filter(Boolean).join(" ");
+    const r = await fetch(`https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(GOOGLE_CSE_KEY)}&cx=${encodeURIComponent(GOOGLE_CSE_CX)}&searchType=image&num=1&safe=active&imgSize=medium&q=${encodeURIComponent(q)}`);
+    const j = await r.json();
+    if (r.status === 429) throw new Error(`Limite diário do Google atingido. ${ok} foto(s) já salvas; continue amanhã.`);
+    if (!r.ok) throw new Error(j.error?.message || `Erro ${r.status}`);
+    const it = j.items?.[0], url = it?.image?.thumbnailLink || it?.link || "";
+    await updateDoc(doc(db, "produtos", p.id), { fotoUrl: url, fotoAuto: !!url, fotoTentada: true });
+    url ? ok++ : vazio++;
+  }
+  toast(`${ok} foto(s) encontrada(s)${vazio ? `, ${vazio} sem resultado` : ""}. Confira: a busca automática pode errar a marca.`);
+}
+
+/* ================= MODELO DE PLANILHA DO VETCONTROL ================= */
+async function baixarModeloPlanilha() {
+  await carregarXLSX();
+  const wb = XLSX.utils.book_new();
+  const leia = [["MODELO DE ESTOQUE DO VETCONTROL"], [""],
+    ["• Uma aba por categoria. NÃO mude o nome das abas: o nome da aba define a categoria (distribuidora) do produto."],
+    ["• Só \"Nome comercial\" é obrigatório. O código é opcional, mas evita duplicar o produto numa nova importação."],
+    ["• A linha de exemplo (Observações = EXEMPLO) é ignorada: pode apagar."],
+    ["• Validade no formato DD/MM/AAAA. Mesmo produto com validade diferente = uma linha para cada."],
+    ["• Estoque mínimo: quando a quantidade chega nele, aparece REPOR. Estoque ideal é opcional (vazio = o dobro do mínimo)."],
+    [`• Depois de alguns dias de uso, o VetControl sugere o mínimo e o ideal certos pelas saídas dos últimos ${DIAS_ANALISE} dias.`],
+    ["• Aba \"Salas\": o que cada setor deve ter. Se o produto ainda não existe no cadastro, ele é criado (saldo zero) com a Categoria e a Unidade da linha. \"Evitar comprar\" nas Observações marca o produto como não comprar."],
+    ["• Na aba \"Salas\", a coluna Sala deve ser igual a uma destas:"], ...SALAS.map((x) => ["      - " + x.nome])];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(leia), "LEIA-ME");
+  const exemplo = ["EX001", "Insumo", "Cateter", "Cateter intravenoso 22G azul", "", "", "BD", "Unidade", "22G", "", "un", 10, 5, 10, "", "", "Armário 1", "EXEMPLO – apague esta linha"];
+  for (const cat of DISTRIBUIDORAS) {
+    const ws = XLSX.utils.aoa_to_sheet([COLUNAS_MODELO, exemplo]); ws["!cols"] = COLUNAS_MODELO.map((c) => ({ wch: Math.max(14, c.length + 2) })); ws["!cols"][3] = { wch: 40 };
+    XLSX.utils.book_append_sheet(wb, ws, NOME_ABA[cat] || cat);
+  }
+  const wsS = XLSX.utils.aoa_to_sheet([COLUNAS_SALAS, [SALAS[0].nome, "EX001", "Cateter intravenoso 22G azul", 10, 3, "Hospitalar Humano", "Unidade", "", "EXEMPLO – apague esta linha", 6]]); wsS["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 44 }, { wch: 14 }, { wch: 24 }, { wch: 22 }, { wch: 12 }, { wch: 12 }, { wch: 40 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(wb, wsS, "Salas");
+  XLSX.writeFile(wb, "Modelo_Estoque_VetControl.xlsx");
+}
+
+/* ================= FICHA DE REPOSIÇÃO DA SALA ================= */
+// Lista o que a sala deve ter (ideal) e, ao lado, a coluna para lançar quanto foi reposto. Cada lançamento vira uma
+// reposição (sai do estoque central e entra na sala), e é isso que alimenta o relatório semanal.
+async function telaFicha(v) {
+  await carregarProdutos();
+  const s = await getDocs(collection(db, "salas", salaAtual, "itens"));
+  const itens = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((it) => Number(it.ideal) > 0).sort((a, b) => a.nome.localeCompare(b.nome));
+  itens.forEach((it) => { it.prod = produtos.find((x) => x.id === it.id); it.controlado = !!(it.prod?.controlado ?? it.controlado);
+    it.agora = total(it.lotes); it.falta = Math.max(0, Number(it.ideal) - it.agora); it.central = it.prod ? total(it.prod.lotesEstoque) : 0; });
+  v.innerHTML = `
+  <div class="barra no-print"><h2>Ficha de reposição</h2><button class="btn" onclick="print()">🖨 Imprimir ficha</button></div>
+  <div class="tabs no-print">${SALAS.map((x) => `<button class="btn ${x.id === salaAtual ? "ativo" : ""}" data-s="${x.id}">${x.nome}</button>`).join("")}</div>
+  <div class="ficha-cab"><h2>${esc(CLINICA.nome)} · Ficha de reposição — ${esc(nomeSala(salaAtual))}</h2><p>Data: ____/____/________ &nbsp;&nbsp; Responsável: ______________________________</p></div>
+  <p class="muted small no-print">Quantidade <b>ideal</b> de cada item nesta sala. Digite na última coluna quanto você repôs e clique em <b>Registrar reposição</b>: sai do estoque central, entra na sala e aparece no relatório semanal. 🔒 Controlados não são lançados aqui (exigem o livro): use Estoque → Retirar p/ setor.${podeConfirmar() ? "" : " Seus lançamentos ficam <b>pendentes</b> até a estoquista confirmar."}</p>
+  <div class="tabela-wrap"><table class="ficha"><thead><tr><th></th><th>Item</th><th>Ideal</th><th>Na sala agora</th><th>Falta</th><th>No estoque central</th><th>Qtd. reposta</th></tr></thead><tbody>
+  ${itens.map((it) => `<tr><td>${fotoTag(it.prod || {}).replace('class="foto"', 'class="foto foto-g"')}</td><td><b>${esc(it.nome)}</b>${it.controlado ? ` <span class="tag critico">🔒 Controlado</span>` : ""}<div class="muted small">${esc(it.medida || "")}</div></td>
+    <td>${it.ideal}</td><td>${it.agora}</td><td>${it.falta ? `<b>${it.falta}</b>` : "—"}</td><td>${it.prod ? it.central : "—"}</td>
+    <td><input type="number" min="0" data-id="${it.id}" data-falta="${it.falta}" data-central="${it.central}" ${it.controlado || !it.prod ? "disabled" : ""}></td></tr>`).join("") || `<tr><td colspan="7" class="muted">Nenhum item com quantidade ideal neste setor. Configure em "Salas, geladeiras e setores" (botão Ideal/crítico) ou importe a aba Salas da planilha.</td></tr>`}
+  </tbody></table></div>
+  ${itens.length ? `<div class="barra no-print" style="margin-top:12px"><label>Quem fez a reposição<input id="fResp" value="${esc(usuario.nome)}"></label>
+    <button class="btn" id="fPreencher">Preencher com o que falta</button><button class="btn primary" id="fSalvar">✅ Registrar reposição</button></div><p id="fRes" class="small"></p>` : ""}`;
+  v.querySelectorAll("[data-s]").forEach((b) => (b.onclick = () => { salaAtual = b.dataset.s; render(); }));
+  if (!itens.length) return;
+  $("#fPreencher").onclick = () => v.querySelectorAll("input[data-id]:not(:disabled)").forEach((i) => { const n = Math.min(Number(i.dataset.falta), Number(i.dataset.central)); i.value = n > 0 ? n : ""; });
+  $("#fSalvar").onclick = async () => {
+    const resp = $("#fResp").value.trim(); if (!resp) return toast("Informe quem fez a reposição.");
+    const linhas = [...v.querySelectorAll("input[data-id]:not(:disabled)")].filter((i) => Number(i.value) > 0);
+    if (!linhas.length) return toast("Digite a quantidade reposta em pelo menos um item.");
+    $("#fSalvar").disabled = true; let ok = 0, pend = 0; const falhas = [];
+    for (const i of linhas) {
+      const it = itens.find((x) => x.id === i.dataset.id), qtd = Number(i.value);
+      try {
+        if (!podeConfirmar()) { await criarPendencia({ tipo: "saida", produtoId: it.prod.id, produtoNome: it.prod.nome, qtd, sala: salaAtual, responsavel: resp, obs: "Ficha de reposição" }); pend++; }
+        else { await darBaixa(it.prod, salaAtual, qtd, resp, "Ficha de reposição"); ok++; }
+      } catch (e) { falhas.push(`${it.nome}: ${e.message}`); }
+    }
+    toast(`${ok ? ok + " item(ns) repostos. " : ""}${pend ? pend + " enviado(s) para confirmação. " : ""}${falhas.length ? falhas.length + " com problema." : ""}`.trim());
+    if (falhas.length) alert("Não foi possível lançar:\n\n" + falhas.join("\n"));
+    render();
+  };
+}
+
+/* ================= RELATÓRIO SEMANAL DE REPOSIÇÃO (o que mais sai por semana) ================= */
+let semRef = null, semSala = "";
+async function telaSemanal(v) {
+  semRef ||= hoje();
+  v.innerHTML = `<div class="card no-print" style="margin-bottom:14px"><h2 style="margin-top:0">Relatório semanal de reposição</h2>
+    <p class="muted small">Soma tudo que foi reposto nos setores (pela Ficha de reposição ou pela retirada do estoque) na semana de segunda a domingo, comparada às 3 semanas anteriores.</p>
+    <div class="duas"><label>Semana que contém o dia<input type="date" id="sRef" value="${semRef}"></label>
+    <label>Setor<select id="sSala"><option value="">Todos os setores</option>${opts(SALAS, semSala)}</select></label></div>
+    <div class="barra"><button class="btn primary" id="sGerar">Gerar</button><button class="btn" id="sCsv">Exportar CSV (Excel)</button><button class="btn" onclick="print()">Imprimir / PDF</button></div></div><div id="sRes"></div>`;
+  let linhas = [], rotulos = [];
+  const dm = (d) => d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  const gerar = async () => {
+    semRef = $("#sRef").value || hoje(); semSala = $("#sSala").value;
+    const ref = new Date(semRef + "T12:00:00"), seg = new Date(ref); seg.setDate(ref.getDate() - ((ref.getDay() + 6) % 7)); seg.setHours(0, 0, 0, 0);
+    const base = new Date(seg); base.setDate(seg.getDate() - 21); const fim = new Date(seg); fim.setDate(seg.getDate() + 7);
+    const snap = await getDocs(query(collection(db, "movimentos"), where("data", ">=", Timestamp.fromDate(base)), where("data", "<", Timestamp.fromDate(fim))));
+    const movs = snap.docs.map((d) => d.data()).filter((m) => m.tipo === "reposicao" && m.data?.toDate && (!semSala || m.local === semSala));
+    const ini = [0, 1, 2, 3].map((i) => { const a = new Date(base); a.setDate(base.getDate() + 7 * i); return a; });
+    const domingo = new Date(seg); domingo.setDate(seg.getDate() + 6);
+    rotulos = [`${dm(ini[0])}`, `${dm(ini[1])}`, `${dm(ini[2])}`, `${dm(seg)}–${dm(domingo)}`];
+    const mp = {}, pessoas = {}, setores = {};
+    movs.forEach((m) => { const i = Math.floor((m.data.toDate() - base) / (7 * 864e5)); if (i < 0 || i > 3) return; const q = Number(m.qtd || 0);
+      const x = (mp[m.produtoId || m.produtoNome] ??= { nome: m.produtoNome, sem: [0, 0, 0, 0], salas: new Set() }); x.sem[i] += q; x.salas.add(nomeSala(m.local));
+      if (i === 3) { const pe = m.responsavel || m.usuarioNome || "—"; pessoas[pe] = (pessoas[pe] || 0) + q; setores[nomeSala(m.local)] = (setores[nomeSala(m.local)] || 0) + q; } });
+    linhas = Object.values(mp).map((x) => ({ ...x, media: (x.sem[0] + x.sem[1] + x.sem[2]) / 3 })).sort((a, b) => b.sem[3] - a.sem[3] || b.media - a.media);
+    const totalSem = linhas.reduce((t, x) => t + x.sem[3], 0), top = linhas[0]?.sem[3] ? linhas[0] : null;
+    const tend = (x) => (!x.media && x.sem[3] ? "novo" : x.media && x.sem[3] > x.media * 1.3 ? "↑ subiu" : x.media && x.sem[3] < x.media * 0.7 ? "↓ caiu" : "=");
+    const mini = (obj, tit) => `<div class="card"><b>${tit}</b><table><tbody>${Object.entries(obj).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<tr><td>${esc(k)}</td><td><b>${n}</b></td></tr>`).join("") || `<tr><td class="muted">—</td></tr>`}</tbody></table></div>`;
+    $("#sRes").innerHTML = `<h2>Reposição da semana ${esc(rotulos[3])}${semSala ? " · " + esc(nomeSala(semSala)) : ""}</h2>
+      <p class="muted small">Gerado em ${new Date().toLocaleString("pt-BR")} por ${esc(usuario.nome)}</p>
+      <div class="grid"><div class="card kpi"><span class="muted">Unidades repostas</span><b>${totalSem}</b></div><div class="card kpi"><span class="muted">Itens diferentes</span><b>${linhas.filter((x) => x.sem[3]).length}</b></div>
+      <div class="card kpi"><span class="muted">Mais saiu</span><b style="font-size:1rem">${top ? esc(top.nome) : "—"}</b>${top ? `<span class="small">${top.sem[3]} un.</span>` : ""}</div></div>
+      <div class="grid" style="margin:12px 0">${mini(setores, "Por setor (semana)")}${mini(pessoas, "Por pessoa (semana)")}</div>
+      <div class="tabela-wrap"><table><thead><tr><th>Item</th><th>Setor(es)</th><th>Sem. ${esc(rotulos[0])}</th><th>Sem. ${esc(rotulos[1])}</th><th>Sem. ${esc(rotulos[2])}</th><th>Semana ${esc(rotulos[3])}</th><th>Média 3 sem.</th><th></th></tr></thead><tbody>
+      ${linhas.map((x) => `<tr><td><b>${esc(x.nome)}</b></td><td class="small">${esc([...x.salas].join(", "))}</td><td>${x.sem[0]}</td><td>${x.sem[1]}</td><td>${x.sem[2]}</td><td><b>${x.sem[3]}</b></td><td>${x.media.toFixed(1).replace(".", ",")}</td><td>${tend(x)}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">Nenhuma reposição registrada neste período.</td></tr>`}</tbody></table></div>`;
+  };
+  $("#sGerar").onclick = () => gerar().catch((e) => ($("#sRes").innerHTML = `<p class="erro">${esc(e.message)}</p>`));
+  $("#sCsv").onclick = () => {
+    if (!linhas.length) return toast("Gere o relatório primeiro.");
+    const csv = [["Item", "Setores", ...rotulos.map((r, i) => (i < 3 ? "Sem. " : "Semana ") + r), "Média 3 sem."].join(";"), ...linhas.map((x) => [x.nome, [...x.salas].join(", "), ...x.sem, x.media.toFixed(1).replace(".", ",")].map((c) => String(c).replace(/;/g, ",")).join(";"))].join("\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv" })); a.download = `reposicao_semanal_${semRef}.csv`; a.click();
+  };
+  $("#sGerar").onclick();
+}
+
 /* ================= PEDIDO ACUMULADO ================= */
 const refPedido = () => doc(db, "config", "pedidoAberto");
 async function carregarPedidoAberto() { const d = await getDoc(refPedido()); pedidoAberto = d.exists() ? d.data().itens || {} : {}; return pedidoAberto; }
@@ -564,8 +761,8 @@ async function telaUsuarios(v) {
   if (!isMaster()) return (v.innerHTML = "<p>Acesso restrito ao master.</p>");
   const us = (await getDocs(collection(db, "users"))).docs.map((d) => ({ id: d.id, ...d.data() }));
   v.innerHTML = `<div class="barra"><h2>Usuários</h2><button class="btn primary" id="novoU">+ Novo usuário</button></div>
-  <table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Situação</th><th></th></tr></thead><tbody>
-  ${us.map((u) => `<tr><td>${esc(u.nome)}</td><td>${esc(u.email)}</td><td>${u.role}</td><td>${u.ativo ? `<span class="tag ok">Ativo</span>` : `<span class="tag critico">Bloqueado</span>`}</td>
+  <table><thead><tr><th>Nome</th><th>E-mail</th><th>Cargo</th><th>Perfil</th><th>Situação</th><th></th></tr></thead><tbody>
+  ${us.map((u) => `<tr><td>${esc(u.nome)}</td><td>${esc(u.email)}</td><td><select data-cg="${u.id}" class="small"><option value="">— definir —</option>${opts(CARGOS, u.cargo)}</select></td><td>${u.role}</td><td>${u.ativo ? `<span class="tag ok">Ativo</span>` : `<span class="tag critico">Bloqueado</span>`}</td>
     <td class="acoes-linha">${u.id !== usuario.uid ? `<button class="btn small" data-t="${u.id}">${u.ativo ? "Bloquear" : "Ativar"}</button>
     <select data-r="${u.id}" class="small">${opts(["usuario", "estoquista", "master"], u.role)}</select>` : "<span class='muted small'>você</span>"}
     <button class="btn small" data-s="${esc(u.email)}">Enviar redefinição de senha</button></td></tr>`).join("")}
@@ -574,13 +771,14 @@ async function telaUsuarios(v) {
     <label>Nome<input name="nome" required></label>
     <label>E-mail<input type="email" name="email" required></label>
     <label>Senha inicial (mín. 6 caracteres)<input name="senha" required minlength="6"></label>
+    <label>Cargo<select name="cargo"><option value="">— definir depois —</option>${opts(CARGOS)}</select></label>
     <label>Perfil<select name="role"><option value="usuario">Usuário (lançamentos ficam pendentes)</option><option value="estoquista">Estoquista (confirma entradas e retiradas)</option><option value="master">Master</option></select></label>`,
     async (f) => {
       // App secundário: cria o login sem deslogar o master
       const sec = initializeApp(firebaseConfig, "sec" + Date.now());
       try {
         const cred = await createUserWithEmailAndPassword(getAuth(sec), f.email, f.senha);
-        await setDoc(doc(db, "users", cred.user.uid), { nome: f.nome, email: f.email, role: f.role, ativo: true, criadoEm: serverTimestamp() });
+        await setDoc(doc(db, "users", cred.user.uid), { nome: f.nome, email: f.email, role: f.role, cargo: f.cargo, ativo: true, criadoEm: serverTimestamp() });
         await signOut(getAuth(sec));
       } catch (e) { throw new Error(e.code === "auth/email-already-in-use" ? "Este e-mail já está cadastrado." : e.message); }
       finally { await deleteApp(sec); }
@@ -589,6 +787,7 @@ async function telaUsuarios(v) {
   const u = (id) => us.find((x) => x.id === id);
   v.querySelectorAll("[data-t]").forEach((b) => (b.onclick = async () => { await updateDoc(doc(db, "users", b.dataset.t), { ativo: !u(b.dataset.t).ativo }); render(); }));
   v.querySelectorAll("select[data-r]").forEach((sel) => (sel.onchange = async () => { await updateDoc(doc(db, "users", sel.dataset.r), { role: sel.value }); toast("Perfil alterado."); render(); }));
+  v.querySelectorAll("select[data-cg]").forEach((sel) => (sel.onchange = async () => { await updateDoc(doc(db, "users", sel.dataset.cg), { cargo: sel.value }); toast("Cargo alterado."); }));
   v.querySelectorAll("[data-s]").forEach((b) => (b.onclick = async () => { await sendPasswordResetEmail(auth, b.dataset.s); toast("E-mail de redefinição enviado."); }));
 }
 
@@ -933,11 +1132,9 @@ async function telaAlertas(v) {
 /* ================= INÍCIO (5 PAINÉIS) ================= */
 async function telaPainel(v) {
   const vis = SETORES.filter((x) => !x.master || isMaster());
-  const tile = (x) => `<a class="tile ${x.outro ? "tile-outro" : ""}" href="#${x.abas[0][0]}"><span class="tile-ico">${x.icone}</span><b>${x.n ? x.n + " · " : ""}${esc(x.titulo)}</b><span class="tile-info" id="info-${x.id}"></span></a>`;
+  const tile = (x) => `<a class="tile" href="#${x.abas[0][0]}"><span class="tile-ico">${x.icone}</span><b>${x.n ? x.n + " · " : ""}${esc(x.titulo)}</b><span class="tile-info" id="info-${x.id}"></span></a>`;
   v.innerHTML = `<h2 class="ola">Olá, ${esc(usuario.nome)} 👋</h2>
-    <div class="tiles">${vis.filter((x) => !x.outro).map(tile).join("")}</div>
-    <h3 class="muted" style="margin-top:26px">Outros módulos <small>(serão um sistema próprio)</small></h3>
-    <div class="tiles tiles-peq">${vis.filter((x) => x.outro).map(tile).join("")}</div>`;
+    ${MODULOS.map((m) => { const itens = vis.filter((x) => x.mod === m.id); return itens.length ? `<section class="modulo"><h3 class="modulo-tit"><span>${m.icone}</span> ${esc(m.titulo)} <small>${esc(m.sub)}</small></h3><div class="tiles">${itens.map(tile).join("")}</div></section>` : ""; }).join("")}`;
   // números de apoio nos quadrados (carregam depois, sem travar a tela)
   try {
     const [exs, sols, pend] = await Promise.all([getDocs(collection(db, "exames")), getDocs(query(collection(db, "solicitacoes"), where("status", "==", "Pendente"))), podeConfirmar() ? getDocs(query(collection(db, "pendencias"), where("status", "==", "Pendente"))) : null]);
@@ -1046,7 +1243,7 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
   }
   function desenhar() {
     $("#itensEx").innerHTML = itens.length ? `<table><thead><tr><th>Exame</th><th>Destino</th><th>Pagamento</th><th>Data/hora da realização</th><th></th></tr></thead><tbody>${itens.map((e, k) => `<tr data-k="${k}">
-      <td><b>${esc(e.nome)}</b></td>
+      <td><b>${esc(e.nome)}</b>${e.composicao?.length ? `<div class="muted small">Inclui: ${e.composicao.map(esc).join(", ")}</div>` : ""}</td>
       <td class="small">${isPrest(e) ? `Realizou <select class="ir">${pOpts(e.realizadoPor)}</select><br>Laudo <select class="il">${pOpts(e.laudoPor)}</select>` : `<span class="tag neutro">${esc(e.laboratorio || "—")}</span>`}</td>
       <td><select class="ip">${opts(["Particular", "Convênio"], e.pagamento || "Particular")}</select> <select class="ic ${e.pagamento === "Convênio" ? "" : "hidden"}">${opts(CONVENIOS, e.convenio)}</select></td>
       <td><input type="datetime-local" class="ih" value="${esc(e.realizadoEm || "")}" required></td>
@@ -2243,9 +2440,11 @@ function modalProgramar(pets) {
 
 /* ================= IMPORTAR A PLANILHA DA CLÍNICA (xlsx com uma aba por categoria) ================= */
 function modalImportarPlanilhaClinica() {
-  abrirModal("📥 Importar planilha da clínica", `<p class="small">Envie a planilha <b>Controle_Estoque_e_Patrimonio.xlsx</b> (uma aba por categoria). Produtos que já existem (mesmo código ou mesmo nome) são <b>ignorados</b>, então dá para importar de novo quando a planilha crescer.</p>
+  abrirModal("📥 Importar planilha", `<p class="small">Envie a planilha no <b>modelo do VetControl</b> (ou o <b>Controle_Estoque_e_Patrimonio.xlsx</b>): uma aba por categoria${DISTRIBUIDORAS.length ? ` (${DISTRIBUIDORAS.map(esc).join(", ")})` : ""} e, se quiser, uma aba <b>Salas</b> com o que cada setor deve ter. Produtos que já existem (mesmo código ou mesmo nome) são <b>ignorados</b>, então dá para importar de novo quando a planilha crescer.</p>
+    <p><button type="button" class="btn" id="plModelo">⬇ Baixar modelo em branco (.xlsx)</button></p>
     <input type="file" id="plArq" accept=".xlsx,.xls"><div id="plPrev" style="margin-top:10px"></div>`, async () => { if (!window.__plan) throw new Error("Escolha a planilha primeiro."); await gravarPlanilha(window.__plan); }, "Importar");
   $("#modalOk").disabled = true;
+  $("#plModelo").onclick = baixarModeloPlanilha;
   $("#plArq").onchange = async (e) => {
     const arq = e.target.files[0]; if (!arq) return; $("#plPrev").innerHTML = "Lendo…";
     await carregarXLSX(); const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", cellDates: true });
@@ -2256,20 +2455,20 @@ function modalImportarPlanilhaClinica() {
     const porCat = {}; r.novos.forEach((p) => (porCat[p.categoria] = (porCat[p.categoria] || 0) + 1));
     $("#plPrev").innerHTML = `<div class="grid"><div class="card kpi"><span class="muted">Produtos novos</span><b>${r.novos.length}</b><span class="small">${r.produtos.length - r.novos.length} já existiam</span></div>
       <div class="card kpi"><span class="muted">Com saldo inicial</span><b>${r.novos.filter((p) => p.qtdInicial > 0).length}</b></div><div class="card kpi"><span class="muted">🔒 Controlados</span><b>${r.novos.filter((p) => p.controlado).length}</b></div>
-      <div class="card kpi"><span class="muted">Grupos de equivalentes</span><b>${r.grupos.length}</b></div></div>
+      <div class="card kpi"><span class="muted">Grupos de equivalentes</span><b>${r.grupos.length}</b></div>${r.salas.length ? `<div class="card kpi"><span class="muted">Itens de sala</span><b>${r.salas.length}</b></div>` : ""}</div>
       <p class="small">${Object.entries(porCat).map(([c, n]) => `${esc(c)}: <b>${n}</b>`).join(" · ")}${r.inventario.length ? ` · Inventário: <b>${r.inventario.length}</b>` : ""}${r.compras.length ? ` · Compras marketplace: <b>${r.compras.length}</b>` : ""}</p>
       ${r.avisos.length ? `<details class="regras" open><summary>Avisos (${r.avisos.length})</summary><ul>${r.avisos.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></details>` : ""}
-      <p class="small muted">A planilha não tem validades: o saldo entra como "sem validade informada". Lance a validade na primeira conferência. Os controlados foram marcados pelo princípio ativo: confira.</p>`;
+      <p class="small muted">${r.novos.some((p) => p.validadeInicial) ? "Produtos sem validade na planilha entram como \"sem validade informada\": lance a validade na primeira conferência." : "A planilha não tem validades: o saldo entra como \"sem validade informada\". Lance a validade na primeira conferência."} Os controlados foram marcados pelo princípio ativo: confira. Depois da importação, use <b>🖼 Buscar fotos</b>.</p>`;
     $("#modalOk").disabled = false;
   };
 }
 async function gravarPlanilha(r) {
-  const idPorCodigo = {}; let n = 0;
-  produtos.forEach((p) => p.codigo && (idPorCodigo[p.codigo] = p.id));
+  const idPorCodigo = {}, idPorNome = {}, dadosPorId = {}; let n = 0;
+  produtos.forEach((p) => { p.codigo && (idPorCodigo[p.codigo] = p.id); idPorNome[norm(p.nome)] = p.id; dadosPorId[p.id] = p; });
   for (const p of r.novos) {
     const { qtdInicial, validadeInicial, loteInicial, ...dados } = p;
     const ref = await addDoc(collection(db, "produtos"), { ...dados, fotoUrl: "", lotesEstoque: qtdInicial > 0 ? [{ qtd: qtdInicial, validade: validadeInicial || "" }] : [], lotesLimbo: [], criadoEm: serverTimestamp() });
-    idPorCodigo[p.codigo] = ref.id; (p.codigosExtras || []).forEach((c) => (idPorCodigo[c] = ref.id));
+    idPorCodigo[p.codigo] = ref.id; idPorNome[norm(p.nome)] = ref.id; dadosPorId[ref.id] = p; (p.codigosExtras || []).forEach((c) => (idPorCodigo[c] = ref.id));
     if (qtdInicial > 0) await log({ tipo: "entrada", produtoId: ref.id, produtoNome: p.nome, qtd: qtdInicial, validade: validadeInicial || "", local: "estoque", obs: "Saldo inicial (planilha)" });
     if (++n % 20 === 0) $("#plPrev").insertAdjacentHTML("afterbegin", `<p class="small">${n} de ${r.novos.length} produtos…</p>`);
   }
@@ -2278,21 +2477,46 @@ async function gravarPlanilha(r) {
     await addDoc(collection(db, "equivalencias"), { ...g, itens: g.itens.map(({ codigo, ...i }) => ({ ...i, produtoId: idPorCodigo[codigo] || "" })), criadoPor: usuario.nome, criadoEm: serverTimestamp() }); }
   for (const x of r.inventario) await addDoc(collection(db, "inventario"), { ...x, status: "Ativo", criadoPor: usuario.nome, criadoEm: serverTimestamp() });
   for (const c of r.compras) await addDoc(collection(db, "listaCompras"), { ...c, criadoEm: serverTimestamp() });
+  // Aba "Salas": cria/atualiza o ideal e o crítico de cada item em cada sala (nunca mexe nas quantidades já contadas)
+  let nSalas = 0, criados = 0; const semSala = [];
+  for (const x of r.salas) {
+    const sala = SALAS.find((z) => z.id === x.sala || norm(z.nome) === norm(x.sala) || (norm(x.sala) && norm(z.nome).includes(norm(x.sala))));
+    let pid = (x.codigo && idPorCodigo[x.codigo]) || idPorNome[norm(x.produto)], pd = dadosPorId[pid];
+    if (!pd && sala && x.produto) { // item do setor que ainda não está no cadastro: cria o produto (saldo zero) para já entrar na ficha
+      pd = { codigo: x.codigo, nome: x.produto, categoria: x.categoria, subcategoria: "", tipoItem: "", principio: "", especie: "", marca: "", medida: x.medida, concentracao: "", conteudo: "", localizacao: "", obs: x.obs,
+        controlado: x.controlado, controladoAuto: x.controlado, minimo: 0, ideal: 0, tipo: "estoque", valorUnit: 0, naoComprar: x.naoComprar };
+      pid = (await addDoc(collection(db, "produtos"), { ...pd, fotoUrl: "", lotesEstoque: [], lotesLimbo: [], criadoEm: serverTimestamp() })).id;
+      idPorNome[norm(pd.nome)] = pid; if (pd.codigo) idPorCodigo[pd.codigo] = pid; dadosPorId[pid] = pd; criados++;
+    }
+    if (!sala || !pd) { semSala.push(`${x.sala || "?"} / ${x.codigo || x.produto}`); continue; }
+    const ref = doc(db, "salas", sala.id, "itens", pid);
+    if ((await getDoc(ref)).exists()) await updateDoc(ref, { ideal: x.ideal, critico: x.critico });
+    else await setDoc(ref, { nome: pd.nome, medida: pd.medida, controlado: !!pd.controlado, lotes: x.atual > 0 ? [{ qtd: x.atual, validade: "" }] : [], ideal: x.ideal, critico: x.critico });
+    nSalas++;
+  }
   window.__plan = null;
-  toast(`Importado: ${r.novos.length} produtos, ${r.grupos.length} grupos de equivalentes.`);
+  toast(`Importado: ${r.novos.length} produtos, ${r.grupos.length} grupos de equivalentes${r.salas.length ? `, ${nSalas} itens de sala${criados ? ` (${criados} produtos novos criados com saldo zero)` : ""}${semSala.length ? ` (${semSala.length} não encontrados: ${semSala.slice(0, 3).join("; ")}…)` : ""}` : ""}.`);
 }
 
 /* ================= MEDICAMENTOS EQUIVALENTES ================= */
 // grupo: { principio, forma, concentracao, semEquivalente, obs, itens: [{ nome, fabricante, concentracao, relacao: "identico"|"ressalva", ressalva, produtoId, fotoUrl, preferencial }] }
 let equivalencias = [];
 async function carregarEquivalencias() { equivalencias = (await getDocs(query(collection(db, "equivalencias"), orderBy("principio")))).docs.map((d) => ({ id: d.id, ...d.data() })); return equivalencias; }
-const grupoDoProduto = (p) => equivalencias.find((g) => g.itens.some((i) => i.produtoId === p.id || norm(i.nome) === norm(p.nome)));
+const casaTermo = (g, texto) => (g.termos || []).some((t) => (" " + norm(texto) + " ").includes(" " + norm(t) + " ") || norm(texto).startsWith(norm(t)));
+const grupoDoProduto = (p) => equivalencias.find((g) => g.itens.some((i) => i.produtoId === p.id || norm(i.nome) === norm(p.nome))) || equivalencias.find((g) => casaTermo(g, p.nome));
+const textoEquiv = (p) => { const g = grupoDoProduto(p); return g ? g.itens.map((i) => i.nome).join(" ") + " " + (g.termos || []).join(" ") : ""; }; // busca por nome comercial equivalente
+async function semearEquivalenciasMercado() { // cria os grupos de mercado que ainda não existem (não duplica)
+  await carregarEquivalencias(); let n = 0;
+  for (const g of GRUPOS_MERCADO) { if (equivalencias.some((e) => norm(e.principio) === norm(g.principio))) continue;
+    await addDoc(collection(db, "equivalencias"), { ...g, itens: g.itens.map((i) => ({ ...i, produtoId: produtos.find((p) => parecido(p.nome, i.nome))?.id || "" })), semEquivalente: false, criadoPor: usuario.nome, criadoEm: serverTimestamp() }); n++; }
+  await carregarEquivalencias(); return n;
+}
 const estoqueDe = (i) => { const p = produtos.find((x) => x.id === i.produtoId); return p ? total(p.lotesEstoque) : null; };
 const fotoItem = (i) => { const p = produtos.find((x) => x.id === i.produtoId); return p && fotoSrc(p) ? fotoTag(p) : i.fotoUrl ? `<img class="foto" src="${esc(i.fotoUrl)}">` : `<div class="foto foto-letra">${esc((i.nome || "?")[0])}</div>`; };
 function equivResumo(p) {
   const g = grupoDoProduto(p); if (!g) return "";
   if (g.semEquivalente) return `<div class="small equiv" data-eq="${g.id}">🚫 Sem equivalente — ${esc(g.obs || "o veterinário define outra opção")}</div>`;
-  const outros = g.itens.filter((i) => i.produtoId !== p.id && norm(i.nome) !== norm(p.nome));
+  const outros = g.itens.filter((i) => i.produtoId !== p.id && norm(i.nome) !== norm(p.nome) && !casaTermo({ termos: [i.nome] }, p.nome));
   const zerado = total(p.lotesEstoque) <= 0;
   return `<div class="small equiv ${zerado ? "falta" : ""}" data-eq="${g.id}">${zerado ? "⚠️ Sem estoque → usar: " : "🔁 Igual a: "}${outros.map((i) => `${i.relacao === "ressalva" ? "⚠" : "="} ${esc(i.nome)}${estoqueDe(i) != null ? ` (${estoqueDe(i)})` : ""}`).join(" · ")}</div>`;
 }
@@ -2315,16 +2539,17 @@ async function telaEquivalentes(v) {
   await Promise.all([carregarProdutos(), carregarEquivalencias()]);
   let busca = "";
   v.innerHTML = `<div class="barra"><h2>Medicamentos equivalentes</h2><input id="eqB" placeholder="Buscar princípio ativo ou nome comercial…">
-    ${podeConfirmar() && !equivalencias.length ? `<button class="btn" id="eqSeed">Carregar exemplos da clínica</button>` : ""}${podeConfirmar() ? `<button class="btn primary" id="eqNovo">+ Novo grupo</button>` : ""}</div>
+    ${podeConfirmar() && !equivalencias.length ? `<button class="btn" id="eqSeed">Carregar exemplos da clínica</button>` : ""}${podeConfirmar() ? `<button class="btn" id="eqMercado">Carregar equivalentes de mercado (fios e dexametasona)</button>` : ""}${podeConfirmar() ? `<button class="btn primary" id="eqNovo">+ Novo grupo</button>` : ""}</div>
   <p class="muted small"><b>=</b> idêntico (mesmo princípio ativo e mesma concentração: pode trocar direto) · <b>⚠</b> substituto com ressalva (outra concentração ou formulação: confirmar com o veterinário e recalcular a dose) · <b>⭐</b> o que a clínica usa como principal.</p>
   <div id="eqLista"></div>`;
   const des = () => { const b = norm(busca);
-    $("#eqLista").innerHTML = equivalencias.filter((g) => !b || norm(g.principio + " " + g.itens.map((i) => i.nome).join(" ")).includes(b)).map((g) => `<div class="card" style="margin-bottom:12px">
+    $("#eqLista").innerHTML = equivalencias.filter((g) => !b || norm(g.principio + " " + g.itens.map((i) => i.nome).join(" ") + " " + (g.termos || []).join(" ")).includes(b)).map((g) => `<div class="card" style="margin-bottom:12px">
       <div class="barra" style="margin:0"><h3 style="margin:0;flex:1">${esc(g.principio)} <span class="muted small">${esc(g.concentracao || "")} · ${esc(g.forma || "")}</span></h3>${podeConfirmar() ? `<button class="btn small" data-e="${g.id}">Editar</button>` : ""}</div>${grupoHtml(g)}</div>`).join("")
       || `<p class="muted">Nenhum grupo cadastrado.</p>`; };
   des(); $("#eqB").oninput = (e) => { busca = e.target.value; des(); };
   $("#eqNovo") && ($("#eqNovo").onclick = () => modalGrupoEquiv());
   $("#eqLista").onclick = (e) => { const b = e.target.closest("[data-e]"); if (b) modalGrupoEquiv(equivalencias.find((g) => g.id === b.dataset.e)); };
+  $("#eqMercado") && ($("#eqMercado").onclick = async () => { const n = await semearEquivalenciasMercado(); toast(n ? `${n} grupos de mercado carregados. Confira e ligue ao estoque.` : "Os grupos de mercado já estavam carregados."); render(); });
   $("#eqSeed") && ($("#eqSeed").onclick = async () => {
     const I = (nome, fabricante, concentracao, relacao, extra = {}) => ({ nome, fabricante, concentracao, relacao, ressalva: "", produtoId: produtos.find((p) => parecido(p.nome, nome))?.id || "", fotoUrl: "", preferencial: false, ...extra });
     const grupos = [
@@ -2374,13 +2599,76 @@ function modalGrupoEquiv(g = { itens: [] }) {
 }
 
 
+/* ================= 1.3 BUSCA INTELIGENTE DE EXAMES (menor preço entre laboratórios) ================= */
+// Dados em dados-exames.js, cálculo em busca-exames.js. "Usar na solicitação" leva a combinação para a Nova solicitação.
+let buscaSel = [], buscaOff = new Set(), preSolicitacao = null;
+const BUSCA_ATALHOS = ["HEMOGRAMA", "UREIA", "CREATININA", "ALT", "AST", "FA", "ALBUMINA", "GLICOSE", "POTASSIO", "SODIO", "LACTATO", "GGT"];
+const rs = (n) => "R$ " + Number(n).toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+async function telaBuscaExames(v) {
+  const IT = DADOS_EXAMES.items, LB = DADOS_EXAMES.labs, LABS = [...new Set(IT.map((i) => i[1]))].sort();
+  const cobre = {}; IT.forEach((i) => i[5].forEach((c) => (cobre[c] = 1)));
+  const IDS = Object.keys(cobre).filter((c) => LB[c]).sort((a, b) => LB[a].localeCompare(LB[b], "pt"));
+  v.innerHTML = `<div id="beRaiz"><div class="card" style="margin-bottom:14px"><h2 style="margin-top:0">Quais exames o paciente precisa?</h2>
+    <input id="beQ" type="search" placeholder="Digite um exame: hemograma, ureia, lactato…" autocomplete="off" style="width:100%"><div id="beSug"></div>
+    <div class="barra" id="beChips" style="margin:10px 0 0"></div><div class="barra" id="beQuick" style="margin:10px 0 0"></div>
+    <p class="muted small" style="margin:12px 0 6px">Laboratórios considerados (toque para ligar ou desligar):</p><div class="barra" id="beLabs" style="margin:0"></div></div><div id="beOut"></div></div>`;
+  const desenharTopo = () => {
+    $("#beChips").innerHTML = buscaSel.length ? buscaSel.map((c) => `<button class="be-chip on" data-rm="${esc(c)}">${esc(LB[c])} ×</button>`).join("") : `<span class="muted small">Nenhum exame escolhido ainda.</span>`;
+    $("#beQuick").innerHTML = `<span class="muted small">Atalhos:</span>` + BUSCA_ATALHOS.filter((c) => LB[c] && !buscaSel.includes(c)).map((c) => `<button class="be-chip" data-add="${esc(c)}">+ ${esc(LB[c])}</button>`).join("");
+    $("#beLabs").innerHTML = LABS.map((l) => `<button class="be-chip ${buscaOff.has(l) ? "off" : "on"}" data-lab="${esc(l)}">${esc(l)}</button>`).join("");
+  };
+  const desenharSug = () => {
+    const q = norm($("#beQ").value.trim()), box = $("#beSug"); if (q.length < 2) { box.innerHTML = ""; return; }
+    const ws = q.split(/\s+/), r = IDS.filter((c) => !buscaSel.includes(c) && ws.every((w) => norm(LB[c]).includes(w))).slice(0, 30);
+    box.innerHTML = r.length ? `<div class="be-sug">${r.map((c) => `<button data-add="${esc(c)}">${esc(LB[c])}</button>`).join("")}</div>` : `<p class="muted small">Nenhum exame com esse nome.</p>`;
+  };
+  let resultado = [];
+  const desenharResultado = () => {
+    const o = $("#beOut");
+    if (!buscaSel.length) { o.innerHTML = `<div class="card"><p class="muted small" style="margin:0">Escolha os exames acima. A busca testa perfis, painéis e exames avulsos de todos os laboratórios e mostra as 6 combinações mais baratas pelo valor Vet Plus.</p></div>`; return; }
+    if (buscaSel.length > 16) { o.innerHTML = `<div class="card"><p class="erro">Escolha no máximo 16 exames por vez.</p></div>`; return; }
+    const pool = IT.filter((i) => !buscaOff.has(i[1])), r = resolverCombinacoes(pool, buscaSel, 6);
+    if (r.missing) { o.innerHTML = `<div class="card"><p class="erro">Nenhum laboratório ligado faz “${esc(LB[r.missing])}”. Ligue outro laboratório ou retire o exame.</p></div>`; return; }
+    const base = r.res[0].cost; resultado = r.res.map((x) => x.ch.map((i) => pool[i]));
+    const tipo = (its) => { const p = its.filter((i) => i[3] === "Perfis/Painéis").length; return p === 0 ? "Somente exames avulsos" : p === its.length ? (p === 1 ? "Perfil / painel único" : "Perfis combinados") : "Perfil + avulsos"; };
+    o.innerHTML = `<h2>${r.res.length} combinações mais baratas</h2>` + r.res.map((x, k) => {
+      const its = resultado[k], extra = [...new Set(its.flatMap((i) => i[4]))].filter((c) => !buscaSel.includes(c) && LB[c]), labs = calcularTubos(its, LB), nl = Object.keys(labs).length;
+      return `<div class="card be-rank"><div class="be-pos">${k + 1}º</div><div style="min-width:0">
+        <div class="barra" style="justify-content:space-between;margin-bottom:6px"><div class="be-tot">${rs(x.cost)}</div><div class="barra" style="margin:0"><span class="tag neutro">${tipo(its)}</span><span class="tag neutro">${nl} ${nl === 1 ? "laboratório" : "laboratórios"}</span>${k ? `<span class="tag neutro">+${rs(x.cost - base)} que o 1º</span>` : `<span class="tag ok">Mais barato</span>`}</div></div>
+        ${its.map((i) => `<div class="be-it"><span>${i[3] === "Perfis/Painéis" ? "<b>Perfil/painel</b> " : ""}${esc(i[0])} <span class="tag neutro">${esc(i[1])}</span>${i[3] === "Perfis/Painéis" ? `<div class="muted small">${i[4].map((c) => esc(LB[c] || c)).join(", ")}</div>` : ""}</span><b>${rs(i[2])}</b></div>`).join("")}
+        ${extra.length ? `<p class="muted small" style="margin:8px 0 0">Exames extras incluídos sem pedir: ${extra.map((c) => esc(LB[c])).join(", ")}.</p>` : ""}
+        <div class="be-tubes">${Object.keys(labs).sort().map((L) => `<div class="be-labbox"><b>${esc(L)}</b>${["l", "v", "c", "a", "o"].filter((t) => labs[L][t]).map((t) => `<div class="be-tl"><span class="be-dot" style="background:${TUBOS[t][1]}"></span>${TUBOS[t][0]}<b>${labs[L][t]}</b></div>`).join("")}<p class="muted small" style="margin:6px 0 0">${esc(textoTubos(labs[L]))}</p></div>`).join("")}</div>
+        <div class="barra" style="margin:10px 0 0"><button class="btn primary" data-usar="${k}">➡ Usar na solicitação</button><button class="btn" data-copy="${k}">Copiar lista</button></div></div></div>`;
+    }).join("") + `<p class="muted small">Valores = valor cobrado pela Vet Plus. Perfis são comparados pelos exames que os compõem, mesmo com nomes diferentes entre laboratórios.</p>`;
+  };
+  const atualizar = () => { desenharTopo(); desenharSug(); desenharResultado(); };
+  $("#beRaiz").onclick = (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.add) { if (!buscaSel.includes(b.dataset.add)) buscaSel.push(b.dataset.add); $("#beQ").value = ""; atualizar(); }
+    else if (b.dataset.rm) { buscaSel = buscaSel.filter((c) => c !== b.dataset.rm); atualizar(); }
+    else if (b.dataset.lab) { buscaOff.has(b.dataset.lab) ? buscaOff.delete(b.dataset.lab) : buscaOff.add(b.dataset.lab); atualizar(); }
+    else if (b.dataset.copy !== undefined) {
+      const its = resultado[+b.dataset.copy], tx = its.map((i) => `${i[0]} - ${i[1]} - ${rs(i[2])}`).join("\n") + "\nTotal: " + rs(its.reduce((s, i) => s + i[2], 0));
+      (navigator.clipboard?.writeText(tx) || Promise.reject()).then(() => (b.textContent = "Copiado"), () => (b.textContent = "Copie manualmente"));
+    } else if (b.dataset.usar !== undefined) {
+      const its = resultado[+b.dataset.usar], labs = calcularTubos(its, LB), agora = agoraLocal();
+      preSolicitacao = { exames: its.map((i) => ({ realizadoEm: agora, catId: "", nome: i[0], grupo: "Laboratorial", laboratorio: i[1], pontos: 1, valor: i[2], composicao: i[3] === "Perfis/Painéis" ? i[4].map((c) => LB[c] || c) : [], pagamento: "Particular", convenio: "", coleta: { status: "Aguardando" } })),
+        obs: "Coleta sugerida — " + Object.keys(labs).sort().map((L) => `${L}: ${textoTubos(labs[L])}`).join(" | ") };
+      location.hash = "#nova-solicitacao";
+    }
+  };
+  $("#beQ").oninput = desenharSug;
+  atualizar();
+}
+
 /* ================= 1.1 NOVA SOLICITAÇÃO (tela própria) ================= */
 async function telaNovaSolicitacao(v) {
   const profs = await carregarProfissionais();
   v.innerHTML = `<div class="card grande-acao"><span style="font-size:3rem">🧪</span><h2>Nova solicitação de exames</h2>
     <p class="muted">Dados do pet e do tutor, quem está solicitando, data da coleta e, em cada exame, se é particular ou qual plano.<br>Exames para o <b>LAB VETPLUS</b> e de imagem vão automaticamente para <b>Laudos → Liberar laudos</b>.</p>
-    <button class="btn primary grande" id="abrirForm">+ Preencher nova solicitação</button></div>`;
-  const abrir = () => modalExame({}, profs, { aposSalvar: () => (location.hash = "#exames") });
+    <button class="btn primary grande" id="abrirForm">+ Preencher nova solicitação</button> <a class="btn grande" href="#busca-exames">💡 Busca inteligente (menor preço)</a></div>`;
+  const pre = preSolicitacao; preSolicitacao = null; // vindo da Busca inteligente: já traz os exames, os laboratórios e a coleta sugerida
+  const abrir = () => modalExame(pre ? { exames: pre.exames, obs: pre.obs } : {}, profs, { aposSalvar: () => (location.hash = "#exames") });
   $("#abrirForm").onclick = abrir; abrir();
 }
 
