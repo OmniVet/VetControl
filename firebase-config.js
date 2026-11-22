@@ -57,7 +57,7 @@ export const EXAMES = {
   "Citologia / outros": ["Citologia", "Histopatológico", "Cultura e antibiograma"]
 };
 export const LABORATORIOS = ["VETER", "VETEX", "LIAN", "LAFORVET", "IFVET", "TECSA", "LAB VETPLUS", "CDV", "LABMIL"];
-export const CONVENIOS = ["Petlove", "PeTTOp", "A.pet", "Doglife"];
+export const CONVENIOS = ["Pet Love", "Dog Life", "A Pet", "Top Pet", "Plamev"];
 // Sugestão inicial do catálogo (botão "Importar sugestão" na aba Catálogo). Depois tudo é editado pelo sistema.
 export const CATALOGO_INICIAL = [
   ["Perfil renal", "Laboratorial", "VETER"], ["Hemograma completo", "Laboratorial", "TECSA"], ["Bioquímico", "Laboratorial", "TECSA"],
