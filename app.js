@@ -9,8 +9,8 @@ import { iniciarEntrevista } from "./entrevista.js";
 import { CARGOS, CRITERIOS_AVALIACAO } from "./firebase-config.js";
 import { GRUPOS_MERCADO } from "./equivalencias-mercado.js";
 import { lerPlanilhaClinica, COLUNAS_MODELO, COLUNAS_SALAS, NOME_ABA } from "./importar-planilha.js";
-import { DADOS_EXAMES } from "./dados-exames.js";
-import { resolverCombinacoes, calcularTubos, textoTubos, TUBOS } from "./busca-exames.js";
+import { resolverCombinacoes } from "./busca-exames.js";
+import { montarBusca } from "./busca-catalogo.js";
 import { EXECUTORES_IMAGEM, EXAMES_IMAGEM } from "./firebase-config.js";
 import { firebaseConfig, MASTER_EMAIL, DISTRIBUIDORAS, MEDIDAS, SALAS, DIAS_ALERTA_VALIDADE, EXAMES, STATUS_EXAME, STATUS_REPOSICAO, INV_CATEGORIAS, INV_LOCAIS, INV_ESTADO, LABORATORIOS, CONVENIOS, ORIGENS, CLINICA, DIAS_SEM_USO, VACINAS, VACINAS_COMERCIAIS, DIAS_A_VENCER, DOMINIO_TUTOR, TIPOS_AMBULATORIO, TABELAS_PRECO, CATEGORIAS_SERVICO, VALIDADE_ORCAMENTO_DIAS, CATALOGO_INICIAL, GEMINI_API_KEY, GEMINI_MODEL, DIAS_ANALISE, DIAS_COBERTURA_MINIMO, DIAS_COBERTURA_IDEAL, GOOGLE_CSE_KEY, GOOGLE_CSE_CX } from "./firebase-config.js";
 
@@ -1228,7 +1228,7 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
   const pagHeader = () => ($("#atend").value === "Plano" ? { pagamento: "Convênio", convenio: $("#plano").value } : { pagamento: "Particular", convenio: "" });
   const nomesProf = [...new Set([...EXECUTORES_IMAGEM, ...profs.map((p) => p.nome)])], vetIni = x.veterinario || meuProfissional(profs)?.nome || "";
   abrirModal(x.id ? "Editar solicitação de exame" : "Nova solicitação de exame", `
-    <div class="duas"><label>Atendimento<select name="atend" id="atend"><option>Particular</option><option value="Plano" ${(x.pagamento === "Convênio" || pag0.pagamento === "Convênio") ? "selected" : ""}>Plano de saúde</option></select></label>
+    <div class="duas"><label>Pagamento dos próximos exames<select name="atend" id="atend"><option>Particular</option><option value="Plano" ${(x.pagamento === "Convênio" || pag0.pagamento === "Convênio") ? "selected" : ""}>Plano de saúde</option></select></label>
     <label id="planoBox" class="${pag0.pagamento === "Convênio" ? "" : "hidden"}">Qual plano<select name="plano" id="plano">${opts(CONVENIOS, pag0.convenio)}</select></label></div>
     <label>Prioridade<select name="prioridade">${opts(["Rotina", "Urgente"], x.prioridade)}</select></label>
     <div class="duas"><label>Nome e sobrenome do pet<input name="paciente" required value="${esc(x.paciente)}"></label>
@@ -1251,21 +1251,21 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
     if (itens.some((e) => !e.realizadoEm)) throw new Error("Informe a data e hora de realização de cada exame.");
     itens.forEach((e) => { e.origem = e.pagamento === "Convênio" ? String(e.convenio).toUpperCase() : "PARTICULAR";
       if (/vetplus/i.test(e.laboratorio || "") && e.laudo !== "SIM") e.laudoPendente = true; }); // VETPLUS = laudo feito aqui: vai para "Liberar laudos"
-    const tipoDe = (g) => (isPrest(g[0]) ? "Imagem" : "Laboratorial"), grupos = [itens.filter((e) => !isPrest(e)), itens.filter(isPrest)].filter((g) => g.length); // lab e imagem viram requisições separadas
+    const tipoDe = (g) => (g.every(isPrest) ? "Imagem" : g.some(isPrest) ? "Mista" : "Laboratorial"), grupos = [itens]; // uma REQUISIÇÃO DE EXAMES leva vários exames, de vários laboratórios/profissionais, cada um com seu pagamento
     const base = { paciente: f.paciente.trim(), especie: f.especie, raca: f.raca, idade: f.idade, peso: f.peso, sexo: f.sexo, tutor: f.tutor.trim(), telefone: f.telefone,
       veterinario: f.veterinario, prioridade: f.prioridade, obs: f.obs, dataColeta: f.dataColeta };
-    const origTipo = x.id ? x.tipoReq || ((x.exames || []).some(isPrest) ? "Imagem" : "Laboratorial") : null;
+    const origTipo = null;
     let iOrig = grupos.findIndex((g) => tipoDe(g) === origTipo); if (iOrig < 0) iOrig = 0;
     for (const [i, g] of grupos.entries()) {
       const d = { ...base, tipoReq: tipoDe(g), exames: g, pagamento: g.some((e) => e.pagamento === "Convênio") ? "Convênio" : "Particular", convenio: [...new Set(g.map((e) => e.convenio).filter(Boolean))].join(", ") };
       if (x.id && i === iOrig) await updateDoc(doc(db, "exames", x.id), { ...d, editado: true, edicoes: [...(x.edicoes || []), { por: usuario.nome, em: new Date().toISOString() }] });
       else await addDoc(collection(db, "exames"), { ...d, status: "Solicitado", historico: [{ status: "Solicitado", por: usuario.nome, em: new Date().toISOString() }], criadoPor: usuario.nome, criadoUid: usuario.uid, criadoEm: serverTimestamp() });
     }
-    toast((grupos.length > 1 ? "Solicitação salva em 2 requisições (laboratório e imagem). " : "Solicitação salva. ") + (itens.some((e) => e.laudoPendente || isPrest(e)) ? "Exames de imagem e do LAB VETPLUS foram para Laudos → Liberar laudos. " : "") + "Ela já está no histórico.");
+    toast("Requisição de exames salva. " + (itens.some((e) => e.laudoPendente || isPrest(e)) ? "Exames de imagem e do LAB VETPLUS foram para Laudos → Liberar laudos. " : "") + "Ela já está no histórico.");
     cfg.aposSalvar?.();
   });
   $("#dtColeta").onchange = (ev) => { lerItens(); itens.forEach((e) => (e.realizadoEm = ev.target.value)); desenhar(); };
-  const atualizaAtend = () => { $("#planoBox").classList.toggle("hidden", $("#atend").value !== "Plano"); lerItens(); const p = pagHeader(); itens.forEach((e) => { e.pagamento = p.pagamento; e.convenio = p.convenio; }); desenhar(); };
+  const atualizaAtend = () => { $("#planoBox").classList.toggle("hidden", $("#atend").value !== "Plano"); };
   $("#atend").onchange = atualizaAtend; $("#plano").onchange = atualizaAtend;
   const setModo = (m) => { modoAdd = m; $("#mLab").classList.toggle("primary", m === "Laboratorial"); $("#mImg").classList.toggle("primary", m === "Imagem"); $("#lblBusca").classList.toggle("hidden", m === "Imagem"); buscar(); };
   $("#mLab").onclick = () => setModo("Laboratorial"); $("#mImg").onclick = () => setModo("Imagem");
@@ -2686,7 +2686,9 @@ let buscaSel = [], buscaOff = new Set(), preSolicitacao = null;
 const BUSCA_ATALHOS = ["HEMOGRAMA", "UREIA", "CREATININA", "ALT", "AST", "FA", "ALBUMINA", "GLICOSE", "POTASSIO", "SODIO", "LACTATO", "GGT"];
 const rs = (n) => "R$ " + Number(n).toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 async function telaBuscaExames(v) {
-  const IT = DADOS_EXAMES.items, LB = DADOS_EXAMES.labs, LABS = [...new Set(IT.map((i) => i[1]))].sort();
+  const cat0 = (await carregarCatalogo()).filter((c) => c.laboratorio && !isPrest(c) && c.valor > 0);
+  if (!cat0.length) { v.innerHTML = `<div class="card"><p class="erro">Importe o catálogo de exames primeiro (Catálogo de exames → Importar catálogo completo).</p></div>`; return; }
+  const { IT, LB } = montarBusca(cat0), LABS = [...new Set(IT.map((i) => i[1]))].sort();
   const cobre = {}; IT.forEach((i) => i[5].forEach((c) => (cobre[c] = 1)));
   const IDS = Object.keys(cobre).filter((c) => LB[c]).sort((a, b) => LB[a].localeCompare(LB[b], "pt"));
   v.innerHTML = `<div id="beRaiz"><div class="card" style="margin-bottom:14px"><h2 style="margin-top:0">Quais exames o paciente precisa?</h2>
@@ -2713,12 +2715,12 @@ async function telaBuscaExames(v) {
     const base = r.res[0].cost; resultado = r.res.map((x) => x.ch.map((i) => pool[i]));
     const tipo = (its) => { const p = its.filter((i) => i[3] === "Perfis/Painéis").length; return p === 0 ? "Somente exames avulsos" : p === its.length ? (p === 1 ? "Perfil / painel único" : "Perfis combinados") : "Perfil + avulsos"; };
     o.innerHTML = `<h2>${r.res.length} combinações mais baratas</h2>` + r.res.map((x, k) => {
-      const its = resultado[k], extra = [...new Set(its.flatMap((i) => i[4]))].filter((c) => !buscaSel.includes(c) && LB[c]), labs = calcularTubos(its, LB), nl = Object.keys(labs).length;
+      const its = resultado[k], extra = [...new Set(its.flatMap((i) => i[4]))].filter((c) => !buscaSel.includes(c) && LB[c]), tb = tubosPorLab(its.map((i) => i[6])), nl = tb.labs.length;
       return `<div class="card be-rank"><div class="be-pos">${k + 1}º</div><div style="min-width:0">
         <div class="barra" style="justify-content:space-between;margin-bottom:6px"><div class="be-tot">${rs(x.cost)}</div><div class="barra" style="margin:0"><span class="tag neutro">${tipo(its)}</span><span class="tag neutro">${nl} ${nl === 1 ? "laboratório" : "laboratórios"}</span>${k ? `<span class="tag neutro">+${rs(x.cost - base)} que o 1º</span>` : `<span class="tag ok">Mais barato</span>`}</div></div>
-        ${its.map((i) => `<div class="be-it"><span>${i[3] === "Perfis/Painéis" ? "<b>Perfil/painel</b> " : ""}${esc(i[0])} <span class="tag neutro">${esc(i[1])}</span>${i[3] === "Perfis/Painéis" ? `<div class="muted small">${i[4].map((c) => esc(LB[c] || c)).join(", ")}</div>` : ""}</span><b>${rs(i[2])}</b></div>`).join("")}
+        ${its.map((i) => `<div class="be-it"><span>${i[3] === "Perfis/Painéis" ? "<b>Perfil/painel</b> " : ""}${esc(i[0])} <span class="tag neutro">${esc(i[1])}</span> <span class="muted small">${esc(prazoDe(i[6]))}</span>${i[3] === "Perfis/Painéis" ? `<div class="muted small">${i[4].map((c) => esc(LB[c] || c)).join(", ")}</div>` : ""}</span><b>${rs(i[2])}</b></div>`).join("")}
         ${extra.length ? `<p class="muted small" style="margin:8px 0 0">Exames extras incluídos sem pedir: ${extra.map((c) => esc(LB[c])).join(", ")}.</p>` : ""}
-        <div class="be-tubes">${Object.keys(labs).sort().map((L) => `<div class="be-labbox"><b>${esc(L)}</b>${["l", "v", "c", "a", "o"].filter((t) => labs[L][t]).map((t) => `<div class="be-tl"><span class="be-dot" style="background:${TUBOS[t][1]}"></span>${TUBOS[t][0]}<b>${labs[L][t]}</b></div>`).join("")}<p class="muted small" style="margin:6px 0 0">${esc(textoTubos(labs[L]))}</p></div>`).join("")}</div>
+        <div class="be-tubes">${tb.labs.map((l) => `<div class="be-labbox"><b>${esc(l.lab)}</b>${["roxo", "vermelho", "cinza", "azul", "outro"].filter((t) => l[t]).map((t) => `<div class="be-tl"><span class="be-dot" style="background:${COR_TUBO[t][1]}"></span>${COR_TUBO[t][0]}<b>${l[t]}</b></div>`).join("")}<p class="muted small" style="margin:4px 0 0">${esc(l.comentario)}</p></div>`).join("")}</div>
         <div class="barra" style="margin:10px 0 0"><button class="btn primary" data-usar="${k}">➡ Usar na solicitação</button><button class="btn" data-copy="${k}">Copiar lista</button></div></div></div>`;
     }).join("") + `<p class="muted small">Valores = valor cobrado pela Vet Plus. Perfis são comparados pelos exames que os compõem, mesmo com nomes diferentes entre laboratórios.</p>`;
   };
@@ -2732,9 +2734,9 @@ async function telaBuscaExames(v) {
       const its = resultado[+b.dataset.copy], tx = its.map((i) => `${i[0]} - ${i[1]} - ${rs(i[2])}`).join("\n") + "\nTotal: " + rs(its.reduce((s, i) => s + i[2], 0));
       (navigator.clipboard?.writeText(tx) || Promise.reject()).then(() => (b.textContent = "Copiado"), () => (b.textContent = "Copie manualmente"));
     } else if (b.dataset.usar !== undefined) {
-      const its = resultado[+b.dataset.usar], labs = calcularTubos(its, LB), agora = agoraLocal();
-      preSolicitacao = { exames: its.map((i) => ({ realizadoEm: agora, catId: "", nome: i[0], grupo: "Laboratorial", laboratorio: i[1], pontos: 1, valor: i[2], composicao: i[3] === "Perfis/Painéis" ? i[4].map((c) => LB[c] || c) : [], pagamento: "Particular", convenio: "", coleta: { status: "Aguardando" } })),
-        obs: "Coleta sugerida — " + Object.keys(labs).sort().map((L) => `${L}: ${textoTubos(labs[L])}`).join(" | ") };
+      const its = resultado[+b.dataset.usar], tb = tubosPorLab(its.map((i) => i[6])), agora = agoraLocal();
+      preSolicitacao = { exames: its.map((i) => ({ realizadoEm: agora, catId: i[6].id, nome: i[6].nome, grupo: "Laboratorial", laboratorio: i[6].laboratorio, pontos: Number(i[6].pontos || 1), valor: i[6].valor || 0, tubos: i[6].tubos || null, analitos: i[6].analitos || 0, prazo: i[6].prazo || "", composicao: i[6].composicao || [], pagamento: "Particular", convenio: "", coleta: { status: "Aguardando" } })),
+        obs: "Coleta sugerida — " + tb.labs.map((l) => `${l.lab}: ${l.comentario}`).join(" | ") };
       location.hash = "#nova-solicitacao";
     }
   };
