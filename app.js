@@ -9,9 +9,9 @@ import { iniciarEntrevista } from "./entrevista.js";
 import { CARGOS, CRITERIOS_AVALIACAO } from "./firebase-config.js";
 import { GRUPOS_MERCADO } from "./equivalencias-mercado.js";
 import { lerPlanilhaClinica, COLUNAS_MODELO, COLUNAS_SALAS, NOME_ABA } from "./importar-planilha.js";
-import { DADOS_EXAMES } from "./dados-exames.js";
-import { resolverCombinacoes, calcularTubos, textoTubos, TUBOS } from "./busca-exames.js";
-import { EXECUTORES_IMAGEM, EXAMES_IMAGEM } from "./firebase-config.js";
+import { resolverCombinacoes } from "./busca-exames.js";
+import { montarBusca } from "./busca-catalogo.js";
+import { EXECUTORES_IMAGEM, EXAMES_IMAGEM, EXAMES_IMAGEM_DETALHE } from "./firebase-config.js";
 import { firebaseConfig, MASTER_EMAIL, DISTRIBUIDORAS, MEDIDAS, SALAS, DIAS_ALERTA_VALIDADE, EXAMES, STATUS_EXAME, STATUS_REPOSICAO, INV_CATEGORIAS, INV_LOCAIS, INV_ESTADO, LABORATORIOS, CONVENIOS, ORIGENS, CLINICA, DIAS_SEM_USO, VACINAS, VACINAS_COMERCIAIS, DIAS_A_VENCER, DOMINIO_TUTOR, TIPOS_AMBULATORIO, TABELAS_PRECO, CATEGORIAS_SERVICO, VALIDADE_ORCAMENTO_DIAS, CATALOGO_INICIAL, GEMINI_API_KEY, GEMINI_MODEL, DIAS_ANALISE, DIAS_COBERTURA_MINIMO, DIAS_COBERTURA_IDEAL, GOOGLE_CSE_KEY, GOOGLE_CSE_CX } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
@@ -175,7 +175,7 @@ onAuthStateChanged(auth, async (u) => {
 window.addEventListener("hashchange", render);
 // Setores do Início (quadrados grandes). abas: [rota, nome]
 const SETORES = [
-  { id: "solic", mod: "exames", n: "1", titulo: "Solicitação de exames", icone: "🧪", abas: [["nova-solicitacao", "1.1 Nova solicitação de exames"], ["exames", "1.2 Consultar solicitações realizadas"], ["busca-exames", "1.3 Busca inteligente (menor preço)"]] },
+  { id: "solic", mod: "exames", n: "1", titulo: "Requisição de exames", icone: "🧪", abas: [["nova-solicitacao", "1.1 Nova requisição de exames"], ["exames", "1.2 Consultar requisições realizadas"], ["busca-exames", "1.3 Busca inteligente (menor preço)"]] },
   { id: "laudos", mod: "exames", n: "2", titulo: "Laudos", icone: "📝", abas: [["laudos-pendentes", "2.1 Liberar laudos"], ["modelos", "2.2 Modelos de laudos"], ["laudos-liberados", "2.3 Consultar laudos liberados"]] },
   { id: "historico", mod: "exames", n: "3", titulo: "Histórico de exames", icone: "📊", abas: [["planilha", "Exames laboratoriais"], ["prestadores", "Imagem e prestadores"], ["producao", "Produção por médico (semana)"], ["comparativo", "Comparativo com laboratório"], ["exportar-exames", "Exportar relatórios de exames"]] },
   { id: "compras", mod: "estoque", n: "4", titulo: "Solicitação de compras", icone: "🛒", abas: [["solicitacoes", "Pedir algo ao estoquista"]] },
@@ -1150,7 +1150,7 @@ async function telaPainel(v) {
     const itens = exs.docs.flatMap((d) => (d.data().exames || []).map(normEx));
     const set = (id, t) => { const el = document.getElementById("info-" + id); if (el) el.innerHTML = t; };
     set("laudos", `${itens.filter(precisaLaudo).length} laudo(s) pendente(s)`);
-    set("solic", `${exs.size} solicitação(ões)`);
+    set("solic", `${exs.size} requisição(ões)`);
     set("compras", sols.size ? `<span class="tag critico">${sols.size} pendente(s)</span>` : "");
     if (pend?.size) set("estoque", `<span class="tag critico">${pend.size} para confirmar</span>`);
   } catch (e) { console.warn(e); }
@@ -1168,26 +1168,29 @@ const normEx = (e) => (typeof e === "string" ? { nome: e, grupo: grupoDe(e) } : 
 const descEx = (e) => { e = normEx(e); const pg = e.pagamento ? ` [${e.pagamento === "Convênio" ? e.convenio : "Particular"}]` : ""; return (isPrest(e) ? `${e.nome}${e.realizadoPor ? " — realizou: " + e.realizadoPor : ""}${e.laudoPor ? " · laudo: " + e.laudoPor : ""}` : `${e.nome}${e.laboratorio ? " — " + e.laboratorio : ""}`) + pg; };
 async function carregarProfissionais() { return (await getDocs(query(collection(db, "profissionais"), orderBy("nome")))).docs.map((d) => ({ id: d.id, ...d.data() })).filter((p) => p.ativo !== false); }
 
-let filtroEx = { status: "abertos", busca: "", pag: "" };
+let filtroEx = { status: "abertos", busca: "", pag: "", dest: "" };
+const destinoEx = (e) => (isPrest(e) ? "Imagem · " + (e.realizadoPor || "sem profissional") : "Lab · " + (e.laboratorio || "sem laboratório"));
 async function telaExames(v) {
   const todos = (await getDocs(query(collection(db, "exames"), orderBy("criadoEm", "desc")))).docs.map((d) => ({ id: d.id, ...d.data() }));
-  v.innerHTML = `<div class="barra"><h2>Solicitações realizadas</h2><a class="btn" href="#nova-solicitacao">+ Nova solicitação</a>
+  v.innerHTML = `<div class="barra"><h2>Requisições realizadas</h2><a class="btn" href="#nova-solicitacao">+ Nova requisição</a>
     <input id="bEx" placeholder="Buscar paciente, tutor, profissional, laboratório…" value="${esc(filtroEx.busca)}">
     <select id="fEx"><option value="abertos">Em aberto</option><option value="todos">Todos</option>${opts(STATUS_EXAME)}</select>
     <select id="pEx"><option value="">Particular + convênios</option><option>Particular</option>${opts(CONVENIOS)}</select>
-    <button class="btn primary" id="novoEx">+ Nova solicitação</button></div>
+    <select id="dEx"><option value="">Todos os laboratórios e profissionais</option>${[...new Set(todos.flatMap((x) => (x.exames || []).map(normEx).map(destinoEx)))].sort().map((d) => `<option>${esc(d)}</option>`).join("")}</select>
+    <button class="btn primary" id="novoEx">+ Nova requisição</button></div>
   <div class="tabela-wrap"><table><thead><tr><th>Data</th><th>Paciente</th><th>Tutor</th><th>Exames · executor / laboratório</th><th>Pagamento</th><th>Solicitante</th><th>Status</th><th></th></tr></thead><tbody id="tbEx"></tbody></table></div>`;
-  $("#fEx").value = filtroEx.status; $("#pEx").value = filtroEx.pag;
+  $("#fEx").value = filtroEx.status; $("#pEx").value = filtroEx.pag; $("#dEx").value = filtroEx.dest;
   const desenhar = () => {
     const b = filtroEx.busca.toLowerCase(), st = filtroEx.status;
     const lista = todos.filter((x) => (!b || `${x.paciente} ${x.tutor} ${x.exames.map(descEx).join(" ")}`.toLowerCase().includes(b)) &&
       (st === "todos" || (st === "abertos" ? !["Entregue ao tutor", "Cancelado"].includes(x.status) : x.status === st)) &&
+      (!filtroEx.dest || (x.exames || []).map(normEx).some((e) => destinoEx(e) === filtroEx.dest)) &&
       (!filtroEx.pag || (filtroEx.pag === "Particular" ? x.pagamento !== "Convênio" : x.convenio === filtroEx.pag)));
     $("#tbEx").innerHTML = lista.map((x) => `<tr>
       <td class="small">${fmtTs(x.criadoEm)}</td>
       <td><b>${esc(x.paciente)}</b><div class="muted small">${esc([x.especie, x.raca, x.idade, x.peso && x.peso + " kg"].filter(Boolean).join(" · "))}</div></td>
       <td>${esc(x.tutor)}<div class="muted small">${esc(x.telefone || "")}</div></td>
-      <td class="small">${x.exames.map((e) => `<div>${esc(descEx(e))}</div>`).join("")}</td>
+      <td class="small">${x.exames.map((e) => `<div>${esc(descEx(e))}</div>`).join("")}<div class="muted">${[...new Set(x.exames.map(normEx).map(destinoEx))].map(esc).join(" | ")}</div></td>
       <td>${x.pagamento === "Convênio" ? `<span class="tag alerta">${esc(x.convenio)}</span>` : `<span class="tag neutro">Particular</span>`}${x.prioridade === "Urgente" ? ` <span class="tag critico">Urgente</span>` : ""}</td>
       <td>${esc(x.veterinario)}</td>
       <td><span class="tag ${corStatus(x.status)}">${x.status}</span>${x.edicoes?.length ? `<div class="small" style="color:#8a5a00" title="${esc(x.edicoes.map((ed) => ed.por + " em " + new Date(ed.em).toLocaleString("pt-BR")).join("\n"))}">✏️ editado por ${esc(x.edicoes.at(-1).por)}<br>${new Date(x.edicoes.at(-1).em).toLocaleString("pt-BR").slice(0, 17)}</div>` : ""}</td>
@@ -1198,6 +1201,7 @@ async function telaExames(v) {
   $("#bEx").oninput = (e) => { filtroEx.busca = e.target.value; desenhar(); };
   $("#fEx").onchange = (e) => { filtroEx.status = e.target.value; desenhar(); };
   $("#pEx").onchange = (e) => { filtroEx.pag = e.target.value; desenhar(); };
+  $("#dEx").onchange = (e) => { filtroEx.dest = e.target.value; desenhar(); };
   const profs = await carregarProfissionais();
   $("#novoEx").onclick = () => modalExame({}, profs);
   $("#tbEx").onclick = async (e) => {
@@ -1205,7 +1209,7 @@ async function telaExames(v) {
     if (b.dataset.st) modalStatusExame(x);
     if (b.dataset.pr) imprimirExame(x);
     if (b.dataset.ed) modalExame(x, profs);
-    if (b.dataset.dx && confirm("Excluir solicitação de exame?")) { await deleteDoc(doc(db, "exames", id)); render(); }
+    if (b.dataset.dx && confirm("Excluir requisição de exames?")) { await deleteDoc(doc(db, "exames", id)); render(); }
   };
 }
 
@@ -1219,42 +1223,54 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
   const cat = await carregarCatalogo();
   if (!cat.length) { toast("Cadastre o catálogo de exames primeiro (aba Catálogo de exames)."); location.hash = "#catalogo"; return; }
   let itens = (x.exames || []).map(normEx).map((e) => ({ ...e }));
-  let tipoReq = x.tipoReq || (itens.some(isPrest) ? "Imagem" : "Laboratorial");
+  const imgBase = new Map(); [...EXAMES_IMAGEM, ...EXAMES_IMAGEM_DETALHE, ...cat.filter(isPrest).map((c) => c.nome)].forEach((n) => { if (!imgBase.has(norm(n))) imgBase.set(norm(n), n); });
+  const lista = [...cat.filter((c) => !isPrest(c)), ...[...imgBase.values()].flatMap((n) => { const c0 = cat.find((c) => isPrest(c) && norm(c.nome) === norm(n)) || {};
+    return EXECUTORES_IMAGEM.map((p) => ({ ...c0, id: "img|" + n + "|" + p, catId: c0.id || slugId(n, "imagem"), nome: n, grupo: "Imagem", realizadoPor: p, tipo: "" })); })];
+  let modoAdd = null, pend = null, tipoReq = "Laboratorial";
+  const pag0 = itens[0] ? { pagamento: itens[0].pagamento, convenio: itens[0].convenio } : { pagamento: "Particular", convenio: "" };
   const nomesProf = [...new Set([...EXECUTORES_IMAGEM, ...profs.map((p) => p.nome)])], vetIni = x.veterinario || meuProfissional(profs)?.nome || "";
-  abrirModal(x.id ? "Editar solicitação de exame" : "Nova solicitação de exame", `
-    <div class="duas"><label>Tipo da requisição<select name="tipoReq" id="tipoReq"><option ${tipoReq === "Laboratorial" ? "selected" : ""}>Laboratorial</option><option ${tipoReq === "Imagem" ? "selected" : ""}>Imagem</option></select></label>
-    <label>Prioridade<select name="prioridade">${opts(["Rotina", "Urgente"], x.prioridade)}</select></label></div>
+  abrirModal(x.id ? "Editar requisição de exames" : "Nova requisição de exames", `
+    <h3 style="margin:4px 0">1. Dados do paciente</h3>
+    <label>Prioridade<select name="prioridade">${opts(["Rotina", "Urgente"], x.prioridade)}</select></label>
     <div class="duas"><label>Nome e sobrenome do pet<input name="paciente" required value="${esc(x.paciente)}"></label>
     <label>Nome e sobrenome do tutor<input name="tutor" required value="${esc(x.tutor)}"></label></div>
-    <div class="duas"><label>Idade do pet<input name="idade" value="${esc(x.idade)}"></label>
-    <label>Veterinário solicitante<select name="veterinario" required><option value="">— escolha —</option>${[...new Set([...nomesProf, ...(vetIni ? [vetIni] : [])])].map((n) => `<option ${n === vetIni ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></label></div>
+    <div class="duas"><label>Espécie<input name="especie" list="dlEsp" value="${esc(x.especie)}" placeholder="Canina, Felina…"></label><label>Raça<input name="raca" value="${esc(x.raca)}"></label></div>
+    <datalist id="dlEsp"><option>Canina</option><option>Felina</option><option>Silvestre</option></datalist>
+    <div class="duas"><label>Sexo<input name="sexo" list="dlSexo" value="${esc(x.sexo)}"></label><label>Peso (kg)<input name="peso" value="${esc(x.peso)}"></label></div>
+    <datalist id="dlSexo"><option>Macho</option><option>Fêmea</option><option>Macho castrado</option><option>Fêmea castrada</option></datalist>
+    <div class="duas"><label>Idade do pet<input name="idade" value="${esc(x.idade)}"></label><label>Telefone do tutor<input name="telefone" value="${esc(x.telefone)}"></label></div>
+    <div class="duas"><label>Médico(a) veterinário(a) solicitante<input name="veterinario" value="${esc(x.veterinario)}" placeholder="digite o nome"></label><label>CRMV<input name="crmv" value="${esc(x.crmv)}" placeholder="digite o CRMV"></label></div>
     <label>📅 Data e hora da coleta<input type="datetime-local" name="dataColeta" id="dtColeta" required value="${esc(x.dataColeta || agoraLocal())}"></label>
-    <details style="margin:6px 0"><summary class="small">Mais dados do pet (espécie, raça, sexo, peso, telefone)</summary>
-    <div class="duas"><label>Espécie<select name="especie">${opts(["Canina", "Felina", "Silvestre", "Outra"], x.especie)}</select></label><label>Raça<input name="raca" value="${esc(x.raca)}"></label></div>
-    <div class="duas"><label>Sexo<select name="sexo">${opts(["Macho", "Fêmea", "Macho castrado", "Fêmea castrada"], x.sexo)}</select></label><label>Peso (kg)<input name="peso" value="${esc(x.peso)}"></label></div>
-    <label>Telefone do tutor<input name="telefone" value="${esc(x.telefone)}"></label></details>
-    <label>Buscar exame (nome ou nome + laboratório, ex.: <i>albumina veter</i>)<input id="addCat" autocomplete="off" placeholder="Digite: hemograma, albumina veter, ultrassom…"></label>
-    <div id="resCat" class="res-cat"></div>
-    <div class="barra"><span class="muted small">Pagamento para todos:</span><button type="button" class="btn small" id="todosPart">Particular</button>${CONVENIOS.map((c) => `<button type="button" class="btn small" data-tc="${esc(c)}">${esc(c)}</button>`).join("")}</div>
+    <h3 style="margin:12px 0 4px">2. Exames da requisição</h3>
+    <div class="barra"><b>O que você vai pedir?</b><button type="button" class="btn primary" id="mLab">🧪 Exame laboratorial</button><button type="button" class="btn primary" id="mImg">🩻 Exame de imagem</button></div>
+    <div id="boxAdd" class="hidden">
+    <label id="lblBusca">Buscar na lista (ex.: <i>albumina</i>, <i>ultrassom dhyego</i>, <i>colesterol veter</i>)<input id="addCat" autocomplete="off" placeholder="Digite para filtrar — a lista completa fica logo abaixo"></label>
+    <div id="resCat" class="res-cat" style="max-height:300px"></div></div>
+    <div id="pendBox" class="card hidden" style="padding:10px;border:2px solid #2f6fd0"></div>
     <div id="itensEx"></div><div id="rodapeEx"></div>
     <label>Suspeita clínica / observações<textarea name="obs" rows="2">${esc(x.obs)}</textarea></label>`,
   async (f) => {
     lerItens();
     if (!itens.length) throw new Error("Adicione pelo menos um exame.");
     if (itens.some((e) => !e.realizadoEm)) throw new Error("Informe a data e hora de realização de cada exame.");
-    if (itens.some((e) => isPrest(e) !== (f.tipoReq === "Imagem"))) throw new Error(f.tipoReq === "Imagem" ? "Esta requisição é de Imagem: remova os exames de laboratório (eles vão em outra requisição)." : "Esta requisição é Laboratorial: remova os exames de imagem (eles vão em outra requisição).");
     itens.forEach((e) => { e.origem = e.pagamento === "Convênio" ? String(e.convenio).toUpperCase() : "PARTICULAR";
       if (/vetplus/i.test(e.laboratorio || "") && e.laudo !== "SIM") e.laudoPendente = true; }); // VETPLUS = laudo feito aqui: vai para "Liberar laudos"
-    const d = { paciente: f.paciente.trim(), especie: f.especie, raca: f.raca, idade: f.idade, peso: f.peso, sexo: f.sexo, tutor: f.tutor.trim(), telefone: f.telefone, tipoReq: f.tipoReq,
-      veterinario: f.veterinario, prioridade: f.prioridade, exames: itens, obs: f.obs, dataColeta: f.dataColeta,
-      pagamento: itens.some((e) => e.pagamento === "Convênio") ? "Convênio" : "Particular", convenio: [...new Set(itens.map((e) => e.convenio).filter(Boolean))].join(", ") };
-    if (x.id) await updateDoc(doc(db, "exames", x.id), { ...d, editado: true, edicoes: [...(x.edicoes || []), { por: usuario.nome, em: new Date().toISOString() }] });
-    else await addDoc(collection(db, "exames"), { ...d, status: "Solicitado", historico: [{ status: "Solicitado", por: usuario.nome, em: new Date().toISOString() }], criadoPor: usuario.nome, criadoUid: usuario.uid, criadoEm: serverTimestamp() });
-    toast(itens.some((e) => e.laudoPendente) ? "Solicitação salva. Exame do LAB VETPLUS enviado para Laudos → Liberar laudos." : "Solicitação salva.");
+    const tipoDe = (g) => (g.every(isPrest) ? "Imagem" : g.some(isPrest) ? "Mista" : "Laboratorial"), grupos = [itens]; // uma REQUISIÇÃO DE EXAMES leva vários exames, de vários laboratórios/profissionais, cada um com seu pagamento
+    const base = { paciente: f.paciente.trim(), especie: f.especie, raca: f.raca, idade: f.idade, peso: f.peso, sexo: f.sexo, tutor: f.tutor.trim(), telefone: f.telefone,
+      veterinario: f.veterinario.trim(), crmv: (f.crmv || "").trim(), prioridade: f.prioridade, obs: f.obs, dataColeta: f.dataColeta };
+    const origTipo = null;
+    let iOrig = grupos.findIndex((g) => tipoDe(g) === origTipo); if (iOrig < 0) iOrig = 0;
+    for (const [i, g] of grupos.entries()) {
+      const d = { ...base, tipoReq: tipoDe(g), exames: g, pagamento: g.some((e) => e.pagamento === "Convênio") ? "Convênio" : "Particular", convenio: [...new Set(g.map((e) => e.convenio).filter(Boolean))].join(", ") };
+      if (x.id && i === iOrig) await updateDoc(doc(db, "exames", x.id), { ...d, editado: true, edicoes: [...(x.edicoes || []), { por: usuario.nome, em: new Date().toISOString() }] });
+      else await addDoc(collection(db, "exames"), { ...d, status: "Solicitado", historico: [{ status: "Solicitado", por: usuario.nome, em: new Date().toISOString() }], criadoPor: usuario.nome, criadoUid: usuario.uid, criadoEm: serverTimestamp() });
+    }
+    toast("Requisição de exames salva. " + (itens.some((e) => e.laudoPendente || isPrest(e)) ? "Exames de imagem e do LAB VETPLUS foram para Laudos → Liberar laudos. " : "") + "Ela já está no histórico.");
     cfg.aposSalvar?.();
   });
   $("#dtColeta").onchange = (ev) => { lerItens(); itens.forEach((e) => (e.realizadoEm = ev.target.value)); desenhar(); };
-  $("#tipoReq").onchange = (ev) => { lerItens(); tipoReq = ev.target.value; buscar(); desenhar(); };
+  const setModo = (m) => { modoAdd = m; pend = null; $("#pendBox").classList.add("hidden"); $("#boxAdd").classList.remove("hidden"); $("#mLab").classList.toggle("primary", m === "Laboratorial"); $("#mImg").classList.toggle("primary", m === "Imagem"); $("#addCat").value = ""; buscar(); $("#addCat").focus(); };
+  $("#mLab").onclick = () => setModo("Laboratorial"); $("#mImg").onclick = () => setModo("Imagem");
   function lerItens() {
     $("#itensEx").querySelectorAll("[data-k]").forEach((r) => { const e = itens[r.dataset.k]; if (!e) return;
       e.realizadoEm = r.querySelector(".ih").value; e.pagamento = r.querySelector(".ip").value; e.convenio = e.pagamento === "Convênio" ? r.querySelector(".ic").value : "";
@@ -1263,40 +1279,45 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
   }
   function desenhar() {
     const dest = (e) => isPrest(e) ? `Realizado por <input class="ir" list="dlProf" value="${esc(e.realizadoPor)}" placeholder="médico ou empresa"><br>Laudo <select class="il">${`<option value="">—</option>` + profs.map((p) => `<option ${p.nome === e.laudoPor ? "selected" : ""}>${esc(p.nome)}</option>`).join("")}</select>` : `<span class="tag neutro">${esc(e.laboratorio || "—")}</span>`;
-    $("#itensEx").innerHTML = itens.length ? `<datalist id="dlProf">${nomesProf.map((n) => `<option value="${esc(n)}">`).join("")}</datalist><table><thead><tr><th>Exame</th><th>${tipoReq === "Imagem" ? "Realizado por" : "Laboratório"}</th><th>Pagamento</th><th>Valor</th><th>Realização</th><th></th></tr></thead><tbody>${itens.map((e, k) => `<tr data-k="${k}">
+    $("#itensEx").innerHTML = itens.length ? `<datalist id="dlProf">${nomesProf.map((n) => `<option value="${esc(n)}">`).join("")}</datalist><table><thead><tr><th>Exame</th><th>Laboratório / realizado por</th><th>Pagamento</th><th>Valor</th><th>Realização</th><th></th></tr></thead><tbody>${itens.map((e, k) => `<tr data-k="${k}">
       <td><b>${esc(e.nome)}</b>${e.composicao?.length ? `<div class="muted small">Inclui: ${e.composicao.map(esc).join(", ")}</div>` : ""}<div class="small muted">⏱ Liberação: ${esc(prazoDe(e, isPrest(e)))}</div></td>
       <td class="small">${dest(e)}</td>
       <td><select class="ip">${opts(["Particular", "Convênio"], e.pagamento || "Particular")}</select> <select class="ic ${e.pagamento === "Convênio" ? "" : "hidden"}">${opts(CONVENIOS, e.convenio)}</select></td>
       <td>${valorLinha(e) != null ? brl(valorLinha(e)) : e.pagamento === "Convênio" ? `<span class="muted small">plano</span>` : "—"}</td>
       <td><input type="datetime-local" class="ih" value="${esc(e.realizadoEm || "")}" required></td>
       <td><button type="button" class="btn small danger" data-rmk="${k}">✕</button></td></tr>
-      ${paPelaClinica(e, profs) ? `<tr data-pa="${k}"><td colspan="6"><b>Aferições de pressão arterial (mmHg)</b> <span class="muted small">realizadas pela Vet Plus</span><div class="duas5">${[0, 1, 2, 3, 4].map((j) => `<input type="number" min="0" placeholder="${j + 1}ª" value="${esc((e.pa || [])[j] ?? "")}">`).join("")}</div></td></tr>` : ""}`).join("")}</tbody></table>` : `<p class="muted small">Nenhum exame adicionado.</p>`;
+      ${ehPA(e) ? `<tr data-pa="${k}"><td colspan="6"><b>Aferições de pressão arterial sistólica (mmHg)</b> <span class="muted small">até 5 valores — vão para o laudo</span><div class="duas5">${[0, 1, 2, 3, 4].map((j) => `<input type="number" min="0" placeholder="${j + 1}ª" value="${esc((e.pa || [])[j] ?? "")}">`).join("")}</div></td></tr>` : ""}`).join("")}</tbody></table>` : `<p class="muted small">Nenhum exame adicionado.</p>`;
     $("#itensEx").querySelectorAll(".ip").forEach((s) => (s.onchange = () => { lerItens(); desenhar(); }));
     $("#itensEx").querySelectorAll(".ir").forEach((s) => (s.onchange = () => { lerItens(); desenhar(); }));
     $("#itensEx").querySelectorAll("[data-rmk]").forEach((b) => (b.onclick = () => { lerItens(); itens.splice(b.dataset.rmk, 1); desenhar(); }));
     rodape();
   }
   function rodape() {
-    const part = itens.filter((e) => valorLinha(e) != null), soma = part.reduce((s, e) => s + valorLinha(e), 0), tb = tipoReq === "Laboratorial" ? tubosPorLab(itens) : { labs: [], total: {} };
+    const part = itens.filter((e) => valorLinha(e) != null), soma = part.reduce((s, e) => s + valorLinha(e), 0), tb = tubosPorLab(itens);
     $("#rodapeEx").innerHTML = (part.length ? `<p style="text-align:right"><b>Total particular: ${brl(soma)}</b> <span class="muted small">(exames por plano não entram)</span></p>` : "") +
       (tb.labs.length ? `<div class="card tubos"><b>🧪 Tubos por laboratório</b> <span class="muted small">(laboratórios diferentes não dividem tubo)</span>${tb.labs.map((l) => `<div><span class="tag neutro">${esc(l.lab)}</span> ${esc(l.comentario || "sem tubo definido")}</div>`).join("")}
         <div style="margin-top:6px"><b>Total:</b> ${Object.entries(tb.total).filter(([, n]) => n).map(([c, n]) => `<span class="tubo-bol" style="background:${COR_TUBO[c][1]}"></span> ${n} ${COR_TUBO[c][0]}`).join(" &nbsp; ") || "—"}</div></div>` : "");
   }
   function buscar() {
-    const q = norm($("#addCat").value).split(/\s+/).filter(Boolean);
-    if (!q.length) { $("#resCat").innerHTML = ""; return; }
-    const r = cat.filter((c) => isPrest(c) === (tipoReq === "Imagem")).filter((c) => { const t = norm(`${c.nome} ${c.laboratorio || ""} ${c.categoria || ""}`); return q.every((w) => t.includes(w)); }).slice(0, 12);
-    $("#resCat").innerHTML = r.map((c) => `<button type="button" class="res-item" data-id="${c.id}"><b>${esc(c.nome)}</b> <span class="tag neutro">${esc(isPrest(c) ? "Imagem" : c.laboratorio)}</span> <span class="muted small">${esc(c.tipo && c.tipo !== "individual" ? c.tipo + " · " : "")}⏱ ${esc(prazoDe(c, isPrest(c)))}</span>${c.valor ? `<span style="float:right">${brl(c.valor)}</span>` : ""}</button>`).join("") || `<p class="muted small">Nada encontrado${tipoReq === "Imagem" ? " em exames de imagem" : ""}.</p>`;
+    const q = norm($("#addCat").value).split(/\s+/).filter(Boolean), nl = (c) => norm(`${c.nome} ${c.laboratorio || ""} ${c.categoria || ""} ${c.realizadoPor || ""}`);
+    const r = lista.filter((c) => modoAdd && isPrest(c) === (modoAdd === "Imagem") && (() => { const t = nl(c); return q.every((w) => t.includes(w)); })());
+    $("#resCat").innerHTML = r.map((c) => `<button type="button" class="res-item" data-id="${esc(c.id)}"><b>${esc(c.nome)}</b> <span class="tag neutro">${esc(isPrest(c) ? "Imagem" + (c.realizadoPor ? " · " + c.realizadoPor : "") : c.laboratorio)}</span> <span class="muted small">${esc(c.tipo && c.tipo !== "individual" ? c.tipo + " · " : "")}⏱ ${esc(prazoDe(c, isPrest(c)))}</span>${c.valor ? `<span style="float:right">${brl(c.valor)}</span>` : ""}</button>`).join("") || `<p class="muted small">Nada encontrado na lista.</p>`;
   }
   $("#addCat").oninput = buscar;
   $("#resCat").onclick = (e) => {
-    const b = e.target.closest("[data-id]"); if (!b) return; const c = cat.find((c) => c.id === b.dataset.id); if (!c) return;
-    lerItens(); itens.push({ realizadoEm: $("#dtColeta").value || agoraLocal(), catId: c.id, nome: c.nome, grupo: c.grupo, laboratorio: isPrest(c) ? "" : c.laboratorio, pontos: Number(c.pontos || 1), pagamento: "Particular", convenio: "",
-      valor: c.valor || 0, tubos: c.tubos || null, analitos: c.analitos || 0, prazo: c.prazo || "", composicao: c.composicao || [], coleta: isPrest(c) ? null : { status: "Aguardando" } });
-    $("#addCat").value = ""; buscar(); desenhar();
+    const b = e.target.closest("[data-id]"); if (!b) return; const c = lista.find((c) => c.id === b.dataset.id); if (!c) return;
+    pend = c; const bx = $("#pendBox"); bx.classList.remove("hidden");
+    bx.innerHTML = `<b>${esc(c.nome)}</b> <span class="tag neutro">${esc(isPrest(c) ? "Imagem · " + (c.realizadoPor || "") : c.laboratorio)}</span>
+      <div class="duas"><label>Este exame é<select id="pgTipo"><option>Particular</option><option value="Plano">Plano de saúde</option></select></label>
+      <label id="pgPlanoBox" class="hidden">Qual plano<select id="pgPlano">${opts(CONVENIOS, "")}</select></label></div>
+      <div class="barra"><button type="button" class="btn primary" id="pgOk">Adicionar à requisição</button><button type="button" class="btn" id="pgNao">Cancelar</button></div>`;
+    $("#pgTipo").onchange = () => $("#pgPlanoBox").classList.toggle("hidden", $("#pgTipo").value !== "Plano");
+    $("#pgNao").onclick = () => { pend = null; bx.classList.add("hidden"); };
+    $("#pgOk").onclick = () => { const pl = $("#pgTipo").value === "Plano";
+      lerItens(); itens.push({ realizadoEm: $("#dtColeta").value || agoraLocal(), catId: c.catId || c.id, nome: c.nome, grupo: c.grupo, realizadoPor: c.realizadoPor || "", laboratorio: isPrest(c) ? "" : c.laboratorio, pontos: Number(c.pontos || 1), pagamento: pl ? "Convênio" : "Particular", convenio: pl ? $("#pgPlano").value : "",
+        valor: c.valor || 0, tubos: c.tubos || null, analitos: c.analitos || 0, prazo: c.prazo || "", composicao: c.composicao || [], coleta: isPrest(c) ? null : { status: "Aguardando" } });
+      pend = null; bx.classList.add("hidden"); $("#addCat").value = ""; buscar(); desenhar(); toast("Exame incluído. Pode escolher o próximo."); };
   };
-  $("#todosPart").onclick = () => { lerItens(); itens.forEach((e) => { e.pagamento = "Particular"; e.convenio = ""; }); desenhar(); };
-  $("#modalCorpo").querySelectorAll("[data-tc]").forEach((b) => (b.onclick = () => { lerItens(); itens.forEach((e) => { e.pagamento = "Convênio"; e.convenio = b.dataset.tc; }); desenhar(); }));
   desenhar();
 }
 
@@ -1309,21 +1330,21 @@ function modalStatusExame(x) {
 }
 
 function imprimirExame(x) {
-  abrirModal("Imprimir solicitação", `<label>Formato<select name="fmt"><option value="a4">Folha A4</option><option value="80">Bobina 80 mm</option><option value="58">Bobina 58 mm</option></select></label>
+  abrirModal("Imprimir requisição", `<label>Formato<select name="fmt"><option value="a4">Folha A4</option><option value="80">Bobina 80 mm</option><option value="58">Bobina 58 mm</option></select></label>
     <label style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" name="ass" checked> Incluir assinatura digital do solicitante (se cadastrada)</label>`,
-  async (f) => { const profs = await carregarProfissionais(); docImpressao(htmlSolicitacao(x, f.fmt !== "a4", f.ass ? profs.find((p) => p.nome === x.veterinario) : null), f.fmt, "Solicitação - " + x.paciente); }, "Imprimir");
+  async (f) => { const profs = await carregarProfissionais(); docImpressao(htmlSolicitacao(x, f.fmt !== "a4", f.ass ? profs.find((p) => p.nome === x.veterinario) : null), f.fmt, "Requisição - " + x.paciente); }, "Imprimir");
 }
 function htmlSolicitacao(x, bob, prof) {
   const ex = x.exames.map(normEx);
   return `<div class="cab"><b>${esc(CLINICA.nome)}</b>${bob ? "" : `<br><small>${esc(CLINICA.endereco)} · ${esc(CLINICA.telefone)}</small>`}</div>
-  <h1>Solicitação de exames${x.prioridade === "Urgente" ? " — URGENTE" : ""}</h1>
+  <h1>Requisição de exames${x.prioridade === "Urgente" ? " — URGENTE" : ""}</h1>
   <p><b>Paciente:</b> ${esc(x.paciente)} (${esc([x.especie, x.raca, x.sexo, x.idade, x.peso && x.peso + " kg"].filter(Boolean).join(", "))})<br><b>Tutor:</b> ${esc(x.tutor)} ${esc(x.telefone || "")}<br><b>Solicitado em:</b> ${fmtTs(x.criadoEm)}</p>
   <table>${ex.map((e) => { const v = valorLinha(e); return `<tr><td><b>${esc(e.nome)}</b><br><small>${isPrest(e) ? esc(e.realizadoPor || "") : esc(e.laboratorio || "")} · ${esc(origemDe(e, x))}${e.realizadoEm ? " · " + new Date(e.realizadoEm).toLocaleString("pt-BR").slice(0, 17) : ""} · liberação: ${esc(prazoDe(e, isPrest(e)))}</small>${e.pa?.some(Boolean) ? `<br><small>Pressão arterial (mmHg): ${e.pa.filter(Boolean).join(" · ")}</small>` : ""}</td>${v != null ? `<td style="text-align:right;white-space:nowrap">${brl(v)}</td>` : ""}</tr>`; }).join("")}</table>
   ${ex.some((e) => valorLinha(e) != null) ? `<p style="text-align:right"><b>Total particular: ${brl(ex.reduce((s, e) => s + (valorLinha(e) || 0), 0))}</b></p>` : ""}
-  ${x.obs ? `<p><b>Obs.:</b> ${esc(x.obs)}</p>` : ""}${assinaturaHtml(prof, x.veterinario)}`;
+  ${x.obs ? `<p><b>Obs.:</b> ${esc(x.obs)}</p>` : ""}${assinaturaHtml(prof, x.veterinario, x.crmv)}`;
 }
-function assinaturaHtml(prof, nome) {
-  return `<div class="ass ${prof?.assinatura ? "" : "sem"}">${prof?.assinatura ? `<img src="${prof.assinatura}">` : ""}<div class="linha">${esc(prof?.nome || nome || "")}<br><small>Médico(a) Veterinário(a)${prof?.crmv ? " · CRMV " + esc(prof.crmv) : ""}</small></div></div>`;
+function assinaturaHtml(prof, nome, crmv) {
+  return `<div class="ass ${prof?.assinatura ? "" : "sem"}">${prof?.assinatura ? `<img src="${prof.assinatura}">` : ""}<div class="linha">${esc(prof?.nome || nome || "")}<br><small>Médico(a) Veterinário(a)${(prof?.crmv || crmv) ? " · CRMV " + esc(prof?.crmv || crmv) : ""}</small></div></div>`;
 }
 function docImpressao(corpo, fmt, titulo) {
   const bob = fmt !== "a4", larg = fmt === "58" ? "54mm" : "74mm";
@@ -1602,20 +1623,22 @@ async function telaModelos(v) {
   v.querySelectorAll("[data-x]").forEach((b) => (b.onclick = async () => { if (confirm("Excluir modelo?")) { await deleteDoc(doc(db, "modelosLaudo", b.dataset.x)); render(); } }));
 }
 
+const paTexto = (e) => { const v = (e.pa || []).map(Number).filter(Boolean); if (!v.length) return "Aferições (mmHg): ___ ___ ___ ___ ___"; return v.map((n, i) => `${i + 1}ª aferição: ${n} mmHg`).join("\n") + `\nMédia: ${Math.round(v.reduce((s, n) => s + n, 0) / v.length)} mmHg`; };
 async function emitirLaudo(x, e, k, profs) {
   const ms = (await getDocs(collection(db, "modelosLaudo"))).docs.map((d) => ({ id: d.id, ...d.data() }));
   const laudistas = profs.filter((p) => p.podeLaudar);
   const meu = meuProfissional(profs);
   const permitidos = isMaster() ? laudistas : laudistas.filter((p) => p.id === meu?.id);
   if (!permitidos.length) return toast(isMaster() ? "Cadastre um profissional com 'Pode liberar laudos' marcado." : "Seu login não está ligado a um profissional que libera laudos.");
-  const sugerido = ms.find((m) => (m.exames || []).some((n) => norm(n) === norm(e.nome))) || ms.find((m) => parecido(m.nome, e.nome));
+  const sugerido = ms.find((m) => m.id === e.modeloId) || ms.find((m) => (m.exames || []).some((n) => norm(n) === norm(e.nome))) || ms.find((m) => parecido(m.nome, e.nome));
   const preencher = (txt, p) => txt.replace(/\{\{(\w+)\}\}/g, (_, c) => ({ paciente: x.paciente, especie: x.especie, raca: x.raca, sexo: x.sexo, idade: x.idade, peso: x.peso, tutor: x.tutor, exame: e.nome,
-    data: fmtData(dataDe(e) || hoje()), hora: horaDe(e) || "___:___", solicitante: x.veterinario, profissional: p?.nome, crmv: p?.crmv }[c] ?? ""));
+    pa: paTexto(e), data: fmtData($("#lAbre")?.value || dataDe(e) || hoje()), hora: horaDe(e) || "___:___", solicitante: x.veterinario, profissional: p?.nome, crmv: p?.crmv }[c] ?? ""));
   const pIni = permitidos.find((p) => p.nome === e.realizadoPor) || meu || permitidos[0];
   abrirModal(`Laudo — ${e.nome} · ${x.paciente}`, `
     <div class="duas"><label>Modelo<select id="lMod"><option value="">— texto livre —</option>${[...new Set(ms.map((m) => m.categoria || "Sem categoria"))].map((cat) => `<optgroup label="${esc(cat)}">${ms.filter((m) => (m.categoria || "Sem categoria") === cat).map((m) => `<option value="${m.id}" ${m.id === sugerido?.id ? "selected" : ""}>${esc(m.nome)}</option>`).join("")}</optgroup>`).join("")}</select></label>
     <label>Profissional que libera<select name="prof" id="lProf">${permitidos.map((p) => `<option value="${p.id}" ${p.id === pIni?.id ? "selected" : ""}>${esc(p.nome)}</option>`).join("")}</select></label></div>
-    <div class="duas"><label>Data do laudo<input type="date" name="dataLaudo" value="${hoje()}" required></label><label>Imagens do exame (opcional, até 4)<input type="file" name="imgs" accept="image/*" multiple></label></div>
+    <div class="duas"><label>Data de abertura da requisição<input type="date" name="dataAbertura" id="lAbre" value="${dataDe(e) || hoje()}"></label><label>Data da liberação do laudo<input type="date" name="dataLaudo" value="${hoje()}" required></label></div>
+    <div class="duas"><label>Imagens do exame (opcional, até 4)<input type="file" name="imgs" accept="image/*" multiple></label></div>
     <label>Assinatura / carimbo do médico em imagem (opcional)<input type="file" name="assImg" accept="image/*"></label>
     <label style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" name="usaAss" checked> Usar a assinatura cadastrada do profissional (se ele tiver)</label>
     <label>Texto do laudo (pode editar à vontade)<textarea name="texto" id="lTxt" rows="18" style="font-family:monospace"></textarea></label>
@@ -1625,20 +1648,20 @@ async function emitirLaudo(x, e, k, profs) {
     const ass = form.assImg.files[0] ? await comprimirAssinatura(form.assImg.files[0]) : f.usaAss ? p.assinatura || "" : "";
     const imagens = []; for (const fl of [...form.imgs.files].slice(0, 4)) imagens.push(await comprimirImagem(fl));
     if (JSON.stringify(imagens).length + ass.length > 800000) throw new Error("Imagens muito pesadas. Use menos imagens ou imagens menores.");
-    const ref = await addDoc(collection(db, "laudos"), { exameId: x.id, k, paciente: x.paciente, tutor: x.tutor, exame: e.nome, texto: f.texto, profissionalId: p.id, profissional: p.nome, crmv: p.crmv || "",
+    const ref = await addDoc(collection(db, "laudos"), { exameId: x.id || "", k, paciente: x.paciente, tutor: x.tutor, solicitante: x.veterinario || "", dataAbertura: f.dataAbertura || "", pacienteAvulso: !x.id, exame: e.nome, texto: f.texto, profissionalId: p.id, profissional: p.nome, crmv: p.crmv || "",
       assinatura: ass, imagens, dataLaudo: f.dataLaudo, liberadoPor: usuario.nome, liberadoEm: serverTimestamp() });
-    await salvarCampo(x.id, k, "laudoId", ref.id); await salvarCampo(x.id, k, "laudo", "SIM");
-    imprimirLaudo({ paciente: x.paciente, exame: e.nome, texto: f.texto, profissional: p.nome, crmv: p.crmv, assinatura: ass, imagens, dataLaudo: f.dataLaudo, liberadoEm: null }, f.fmt);
+    if (x.id) { await salvarCampo(x.id, k, "laudoId", ref.id); await salvarCampo(x.id, k, "laudo", "SIM"); }
+    imprimirLaudo({ paciente: x.paciente, tutor: x.tutor, solicitante: x.veterinario, dataAbertura: f.dataAbertura, exame: e.nome, texto: f.texto, profissional: p.nome, crmv: p.crmv, assinatura: ass, imagens, dataLaudo: f.dataLaudo, liberadoEm: null }, f.fmt);
     toast("Laudo liberado e salvo.");
   }, "Liberar laudo e imprimir");
-  const aplicar = () => { const m = ms.find((m) => m.id === $("#lMod").value); const p = permitidos.find((p) => p.id === $("#lProf").value); $("#lTxt").value = preencher(m?.conteudo || "", p); };
-  $("#lMod").onchange = aplicar; $("#lProf").onchange = aplicar; aplicar();
+  const aplicar = () => { const m = ms.find((m) => m.id === $("#lMod").value); const p = permitidos.find((p) => p.id === $("#lProf").value); $("#lTxt").value = preencher(m?.conteudo || (ehPA(e) ? "Aferição de pressão arterial sistólica\nPaciente: {{paciente}} — Tutor: {{tutor}}\n\n{{pa}}\n\nObservações:\n" : ""), p); };
+  $("#lMod").onchange = aplicar; $("#lProf").onchange = aplicar; $("#lAbre").onchange = aplicar; aplicar();
 }
 function imprimirLaudo(l, fmt = "a4") {
   docImpressao(`<div class="cab"><img src="${new URL(CLINICA.logoLaudo || "logo-vetplus.png", location.href).href}" alt="" style="max-height:70px;display:block;margin:0 auto 4px" onerror="this.remove()"><b>${esc(CLINICA.nome)}</b><br><small>${[CLINICA.cnpj && "CNPJ " + CLINICA.cnpj, CLINICA.endereco, CLINICA.telefone && "Tel. " + CLINICA.telefone, CLINICA.whatsapp && "WhatsApp " + CLINICA.whatsapp].filter(Boolean).map(esc).join(" · ")}</small></div>
     <h1>Laudo — ${esc(l.exame)}</h1><div class="texto">${esc(l.texto)}</div>
     ${(l.imagens || []).length ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">${l.imagens.map((s) => `<img src="${s}" style="width:100%;max-height:260px;object-fit:contain;border:1px solid #ccc">`).join("")}</div>` : ""}
-    <p style="text-align:right;margin-top:20px"><small>Data do laudo: ${l.dataLaudo ? fmtData(l.dataLaudo) : l.liberadoEm?.toDate ? l.liberadoEm.toDate().toLocaleDateString("pt-BR") : new Date().toLocaleDateString("pt-BR")}</small></p>
+    <p style="text-align:right;margin-top:20px"><small>${l.dataAbertura ? "Requisição aberta em: " + fmtData(l.dataAbertura) + " · " : ""}${l.solicitante ? "Solicitante: " + esc(l.solicitante) + " · " : ""}Data do laudo: ${l.dataLaudo ? fmtData(l.dataLaudo) : l.liberadoEm?.toDate ? l.liberadoEm.toDate().toLocaleDateString("pt-BR") : new Date().toLocaleDateString("pt-BR")}</small></p>
     ${assinaturaHtml({ nome: l.profissional, crmv: l.crmv, assinatura: l.assinatura })}`, fmt, `Laudo ${l.exame} - ${l.paciente}`);
 }
 async function verLaudo(id) { const d = await getDoc(doc(db, "laudos", id)); if (d.exists()) abrirLaudo(d.data()); }
@@ -1784,7 +1807,7 @@ async function telaCatalogo(v) {
   v.innerHTML = `<div class="barra"><h2>Catálogo de exames</h2>
     ${isMaster() && !cat.length ? `<button class="btn" id="seed">Importar sugestão inicial</button>` : ""}
     ${isMaster() ? `<button class="btn" id="impCat">Importar catálogo completo (JSON/CSV)</button><button class="btn" id="impC">Importar lista</button><button class="btn primary" id="novoC">+ Novo exame</button>` : ""}</div>
-  <p class="muted small">Cada exame já fica ligado ao laboratório para onde vai. Ao escolher "Perfil renal — VETER" na solicitação, ele vai direto para o VETER. Um mesmo exame pode aparecer com dois laboratórios diferentes, se vocês usarem os dois. Os <b>pontos</b> são o que o membro da equipe ganha ao fazer a coleta.</p>
+  <p class="muted small">Cada exame já fica ligado ao laboratório para onde vai. Ao escolher "Perfil renal — VETER" na requisição, ele vai direto para o VETER. Um mesmo exame pode aparecer com dois laboratórios diferentes, se vocês usarem os dois. Os <b>pontos</b> são o que o membro da equipe ganha ao fazer a coleta.</p>
   <table><thead><tr><th>Exame</th><th>Tipo</th><th>Laboratório</th>${isMaster() ? "<th>Valor lab.</th>" : ""}<th>Valor Vet Plus</th><th>Pontos por coleta</th><th>Situação</th><th></th></tr></thead><tbody>
   ${cat.map((c) => `<tr><td><b>${esc(c.nome)}</b></td><td>${esc(c.grupo)}</td><td>${isPrest(c) ? `<span class="muted">feito na clínica</span>` : `<span class="tag neutro">${esc(c.laboratorio)}</span>`}</td>
     ${isMaster() ? `<td>${custos[c.id] != null ? brl(custos[c.id]) : "—"}</td>` : ""}<td>${c.valor ? brl(c.valor) : "—"}</td><td>${isPrest(c) ? "—" : c.pontos ?? 1}</td><td>${c.ativo !== false ? `<span class="tag ok">Ativo</span>` : `<span class="tag neutro">Inativo</span>`}</td>
@@ -2673,7 +2696,9 @@ let buscaSel = [], buscaOff = new Set(), preSolicitacao = null;
 const BUSCA_ATALHOS = ["HEMOGRAMA", "UREIA", "CREATININA", "ALT", "AST", "FA", "ALBUMINA", "GLICOSE", "POTASSIO", "SODIO", "LACTATO", "GGT"];
 const rs = (n) => "R$ " + Number(n).toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 async function telaBuscaExames(v) {
-  const IT = DADOS_EXAMES.items, LB = DADOS_EXAMES.labs, LABS = [...new Set(IT.map((i) => i[1]))].sort();
+  const cat0 = (await carregarCatalogo()).filter((c) => c.laboratorio && !isPrest(c) && c.valor > 0);
+  if (!cat0.length) { v.innerHTML = `<div class="card"><p class="erro">Importe o catálogo de exames primeiro (Catálogo de exames → Importar catálogo completo).</p></div>`; return; }
+  const { IT, LB } = montarBusca(cat0), LABS = [...new Set(IT.map((i) => i[1]))].sort();
   const cobre = {}; IT.forEach((i) => i[5].forEach((c) => (cobre[c] = 1)));
   const IDS = Object.keys(cobre).filter((c) => LB[c]).sort((a, b) => LB[a].localeCompare(LB[b], "pt"));
   v.innerHTML = `<div id="beRaiz"><div class="card" style="margin-bottom:14px"><h2 style="margin-top:0">Quais exames o paciente precisa?</h2>
@@ -2686,9 +2711,9 @@ async function telaBuscaExames(v) {
     $("#beLabs").innerHTML = LABS.map((l) => `<button class="be-chip ${buscaOff.has(l) ? "off" : "on"}" data-lab="${esc(l)}">${esc(l)}</button>`).join("");
   };
   const desenharSug = () => {
-    const q = norm($("#beQ").value.trim()), box = $("#beSug"); if (q.length < 2) { box.innerHTML = ""; return; }
-    const ws = q.split(/\s+/), r = IDS.filter((c) => !buscaSel.includes(c) && ws.every((w) => norm(LB[c]).includes(w))).slice(0, 30);
-    box.innerHTML = r.length ? `<div class="be-sug">${r.map((c) => `<button data-add="${esc(c)}">${esc(LB[c])}</button>`).join("")}</div>` : `<p class="muted small">Nenhum exame com esse nome.</p>`;
+    const q = norm($("#beQ").value.trim()), box = $("#beSug");
+    const ws = q.split(/\s+/).filter(Boolean), r = IDS.filter((c) => !buscaSel.includes(c) && ws.every((w) => norm(LB[c]).includes(w)));
+    box.innerHTML = r.length ? `<div class="be-sug" style="max-height:260px">${r.map((c) => `<button data-add="${esc(c)}">${esc(LB[c])}</button>`).join("")}</div>` : `<p class="muted small">Nenhum exame com esse nome.</p>`;
   };
   let resultado = [];
   const desenharResultado = () => {
@@ -2700,13 +2725,13 @@ async function telaBuscaExames(v) {
     const base = r.res[0].cost; resultado = r.res.map((x) => x.ch.map((i) => pool[i]));
     const tipo = (its) => { const p = its.filter((i) => i[3] === "Perfis/Painéis").length; return p === 0 ? "Somente exames avulsos" : p === its.length ? (p === 1 ? "Perfil / painel único" : "Perfis combinados") : "Perfil + avulsos"; };
     o.innerHTML = `<h2>${r.res.length} combinações mais baratas</h2>` + r.res.map((x, k) => {
-      const its = resultado[k], extra = [...new Set(its.flatMap((i) => i[4]))].filter((c) => !buscaSel.includes(c) && LB[c]), labs = calcularTubos(its, LB), nl = Object.keys(labs).length;
+      const its = resultado[k], extra = [...new Set(its.flatMap((i) => i[4]))].filter((c) => !buscaSel.includes(c) && LB[c]), tb = tubosPorLab(its.map((i) => i[6])), nl = tb.labs.length;
       return `<div class="card be-rank"><div class="be-pos">${k + 1}º</div><div style="min-width:0">
         <div class="barra" style="justify-content:space-between;margin-bottom:6px"><div class="be-tot">${rs(x.cost)}</div><div class="barra" style="margin:0"><span class="tag neutro">${tipo(its)}</span><span class="tag neutro">${nl} ${nl === 1 ? "laboratório" : "laboratórios"}</span>${k ? `<span class="tag neutro">+${rs(x.cost - base)} que o 1º</span>` : `<span class="tag ok">Mais barato</span>`}</div></div>
-        ${its.map((i) => `<div class="be-it"><span>${i[3] === "Perfis/Painéis" ? "<b>Perfil/painel</b> " : ""}${esc(i[0])} <span class="tag neutro">${esc(i[1])}</span>${i[3] === "Perfis/Painéis" ? `<div class="muted small">${i[4].map((c) => esc(LB[c] || c)).join(", ")}</div>` : ""}</span><b>${rs(i[2])}</b></div>`).join("")}
+        ${its.map((i) => `<div class="be-it"><span>${i[3] === "Perfis/Painéis" ? "<b>Perfil/painel</b> " : ""}${esc(i[0])} <span class="tag neutro">${esc(i[1])}</span> <span class="muted small">${esc(prazoDe(i[6]))}</span>${i[3] === "Perfis/Painéis" ? `<div class="muted small">${i[4].map((c) => esc(LB[c] || c)).join(", ")}</div>` : ""}</span><b>${rs(i[2])}</b></div>`).join("")}
         ${extra.length ? `<p class="muted small" style="margin:8px 0 0">Exames extras incluídos sem pedir: ${extra.map((c) => esc(LB[c])).join(", ")}.</p>` : ""}
-        <div class="be-tubes">${Object.keys(labs).sort().map((L) => `<div class="be-labbox"><b>${esc(L)}</b>${["l", "v", "c", "a", "o"].filter((t) => labs[L][t]).map((t) => `<div class="be-tl"><span class="be-dot" style="background:${TUBOS[t][1]}"></span>${TUBOS[t][0]}<b>${labs[L][t]}</b></div>`).join("")}<p class="muted small" style="margin:6px 0 0">${esc(textoTubos(labs[L]))}</p></div>`).join("")}</div>
-        <div class="barra" style="margin:10px 0 0"><button class="btn primary" data-usar="${k}">➡ Usar na solicitação</button><button class="btn" data-copy="${k}">Copiar lista</button></div></div></div>`;
+        <div class="be-tubes">${tb.labs.map((l) => `<div class="be-labbox"><b>${esc(l.lab)}</b>${["roxo", "vermelho", "cinza", "azul", "outro"].filter((t) => l[t]).map((t) => `<div class="be-tl"><span class="be-dot" style="background:${COR_TUBO[t][1]}"></span>${COR_TUBO[t][0]}<b>${l[t]}</b></div>`).join("")}<p class="muted small" style="margin:4px 0 0">${esc(l.comentario)}</p></div>`).join("")}</div>
+        <div class="barra" style="margin:10px 0 0"><button class="btn primary" data-usar="${k}">➡ Usar na requisição</button><button class="btn" data-copy="${k}">Copiar lista</button></div></div></div>`;
     }).join("") + `<p class="muted small">Valores = valor cobrado pela Vet Plus. Perfis são comparados pelos exames que os compõem, mesmo com nomes diferentes entre laboratórios.</p>`;
   };
   const atualizar = () => { desenharTopo(); desenharSug(); desenharResultado(); };
@@ -2719,9 +2744,9 @@ async function telaBuscaExames(v) {
       const its = resultado[+b.dataset.copy], tx = its.map((i) => `${i[0]} - ${i[1]} - ${rs(i[2])}`).join("\n") + "\nTotal: " + rs(its.reduce((s, i) => s + i[2], 0));
       (navigator.clipboard?.writeText(tx) || Promise.reject()).then(() => (b.textContent = "Copiado"), () => (b.textContent = "Copie manualmente"));
     } else if (b.dataset.usar !== undefined) {
-      const its = resultado[+b.dataset.usar], labs = calcularTubos(its, LB), agora = agoraLocal();
-      preSolicitacao = { exames: its.map((i) => ({ realizadoEm: agora, catId: "", nome: i[0], grupo: "Laboratorial", laboratorio: i[1], pontos: 1, valor: i[2], composicao: i[3] === "Perfis/Painéis" ? i[4].map((c) => LB[c] || c) : [], pagamento: "Particular", convenio: "", coleta: { status: "Aguardando" } })),
-        obs: "Coleta sugerida — " + Object.keys(labs).sort().map((L) => `${L}: ${textoTubos(labs[L])}`).join(" | ") };
+      const its = resultado[+b.dataset.usar], tb = tubosPorLab(its.map((i) => i[6])), agora = agoraLocal();
+      preSolicitacao = { exames: its.map((i) => ({ realizadoEm: agora, catId: i[6].id, nome: i[6].nome, grupo: "Laboratorial", laboratorio: i[6].laboratorio, pontos: Number(i[6].pontos || 1), valor: i[6].valor || 0, tubos: i[6].tubos || null, analitos: i[6].analitos || 0, prazo: i[6].prazo || "", composicao: i[6].composicao || [], pagamento: "Particular", convenio: "", coleta: { status: "Aguardando" } })),
+        obs: "Coleta sugerida — " + tb.labs.map((l) => `${l.lab}: ${l.comentario}`).join(" | ") };
       location.hash = "#nova-solicitacao";
     }
   };
@@ -2732,9 +2757,9 @@ async function telaBuscaExames(v) {
 /* ================= 1.1 NOVA SOLICITAÇÃO (tela própria) ================= */
 async function telaNovaSolicitacao(v) {
   const profs = await carregarProfissionais();
-  v.innerHTML = `<div class="card grande-acao"><span style="font-size:3rem">🧪</span><h2>Nova solicitação de exames</h2>
+  v.innerHTML = `<div class="card grande-acao"><span style="font-size:3rem">🧪</span><h2>Nova requisição de exames</h2>
     <p class="muted">Dados do pet e do tutor, quem está solicitando, data da coleta e, em cada exame, se é particular ou qual plano.<br>Exames para o <b>LAB VETPLUS</b> e de imagem vão automaticamente para <b>Laudos → Liberar laudos</b>.</p>
-    <button class="btn primary grande" id="abrirForm">+ Preencher nova solicitação</button> <a class="btn grande" href="#busca-exames">💡 Busca inteligente (menor preço)</a></div>`;
+    <button class="btn primary grande" id="abrirForm">+ Preencher nova requisição</button> <a class="btn grande" href="#busca-exames">💡 Busca inteligente (menor preço)</a></div>`;
   const pre = preSolicitacao; preSolicitacao = null; // vindo da Busca inteligente: já traz os exames, os laboratórios e a coleta sugerida
   const abrir = () => modalExame(pre ? { exames: pre.exames, obs: pre.obs } : {}, profs, { aposSalvar: () => (location.hash = "#exames") });
   $("#abrirForm").onclick = abrir; abrir();
@@ -2745,19 +2770,35 @@ async function telaLaudosPendentes(v) {
   const [docs, profs] = await Promise.all([getDocs(collection(db, "exames")).then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() }))), carregarProfissionais()]);
   const pend = docs.flatMap((x) => (x.exames || []).map(normEx).map((e, k) => ({ x, e, k }))).filter(({ e }) => precisaLaudo(e))
     .sort((a, b) => (a.x.prioridade === "Urgente" ? -1 : 0) - (b.x.prioridade === "Urgente" ? -1 : 0) || (a.e.realizadoEm || "").localeCompare(b.e.realizadoEm || ""));
-  v.innerHTML = `<div class="barra"><h2>Laudos para liberar (${pend.length})</h2><button class="btn primary" id="lbNovo">+ Laudo de paciente do histórico</button></div>
+  v.innerHTML = `<div class="barra"><h2>Laudos para liberar (${pend.length})</h2><button class="btn primary" id="lbNovo">+ Liberar laudo (novo)</button></div>
   <p class="muted small">Exames de imagem e do LAB VETPLUS entram aqui sozinhos. Libere pelo <b>modelo</b> (texto com assinatura digital) ou <b>anexe o PDF</b> pronto.</p>
   <div class="tabela-wrap"><table><thead><tr><th>Coleta / realização</th><th>Paciente / tutor</th><th>Exame</th><th>Destino</th><th>Solicitante</th><th></th></tr></thead><tbody>
   ${pend.map(({ x, e }, i) => `<tr><td>${e.realizadoEm ? new Date(e.realizadoEm).toLocaleString("pt-BR").slice(0, 17) : "—"}${x.prioridade === "Urgente" ? ` <span class="tag critico">Urgente</span>` : ""}</td>
     <td><b>${esc(x.paciente)}</b><div class="muted small">${esc(x.tutor)}</div></td><td><b>${esc(e.nome)}</b></td>
     <td class="small">${isPrest(e) ? "Imagem" + (e.realizadoPor ? " · " + esc(e.realizadoPor) : "") : esc(e.laboratorio || "")}</td><td>${esc(x.veterinario || "")}</td>
     <td class="acoes-linha"><button class="btn small primary" data-m="${i}">📝 Pelo modelo</button><button class="btn small" data-p="${i}">📎 Anexar PDF</button></td></tr>`).join("") || `<tr><td colspan="6" class="muted">Nenhum laudo pendente. 👍</td></tr>`}</tbody></table></div>`;
-  $("#lbNovo").onclick = () => { abrirModal("Novo laudo a partir do histórico", `<label>Buscar por paciente, tutor ou exame<input id="lbBusca" autocomplete="off" placeholder="Ex.: Thor, Maria, ultrassom"></label><div id="lbRes" class="small"></div>`, async () => {}, "Fechar");
-    const todos = docs.flatMap((x) => (x.exames || []).map(normEx).map((e, k) => ({ x, e, k }))).sort((a, b) => (b.e.realizadoEm || "").localeCompare(a.e.realizadoEm || ""));
+  $("#lbNovo").onclick = async () => {
+    const ms = (await getDocs(collection(db, "modelosLaudo"))).docs.map((d) => ({ id: d.id, ...d.data() })).sort((p, q) => (p.categoria || "").localeCompare(q.categoria || "") || p.nome.localeCompare(q.nome));
+    const todos = docs.flatMap((x) => (x.exames || []).map(normEx).map((e, k) => ({ x, e, k }))).sort((p, q) => (q.e.realizadoEm || "").localeCompare(p.e.realizadoEm || ""));
+    abrirModal("Liberar laudo", `<p class="muted small" style="margin:0">Puxe um paciente que já está no histórico <b>ou</b> preencha abaixo os mesmos dados da requisição.</p>
+      <input id="lbBusca" autocomplete="off" placeholder="🔎 Buscar no histórico: paciente, tutor ou exame"><div id="lbRes" class="small res-cat" style="max-height:140px"></div>
+      <h3 style="margin:8px 0 2px">Paciente</h3>
+      <div class="duas"><label>Nome e sobrenome do pet<input name="paciente" required></label><label>Nome e sobrenome do tutor<input name="tutor" required></label></div>
+      <div class="duas"><label>Espécie<input name="especie"></label><label>Raça<input name="raca"></label></div>
+      <div class="duas"><label>Sexo<input name="sexo"></label><label>Idade<input name="idade"></label></div>
+      <div class="duas"><label>Peso (kg)<input name="peso"></label><label>Data de abertura da requisição<input type="date" name="abre" value="${hoje()}"></label></div>
+      <div class="duas"><label>Médico(a) solicitante<input name="vet"></label><label>CRMV do solicitante<input name="crmvSol"></label></div>
+      <h3 style="margin:8px 0 2px">Exame / base do laudo</h3>
+      <div class="duas"><label>Modelo de laudo<select name="modelo" id="lbMod"><option value="">— texto livre —</option>${[...new Set(ms.map((m) => m.categoria || "Sem categoria"))].map((cat) => `<optgroup label="${esc(cat)}">${ms.filter((m) => (m.categoria || "Sem categoria") === cat).map((m) => `<option value="${m.id}">${esc(m.nome)}</option>`).join("")}</optgroup>`).join("")}</select></label>
+      <label>Nome do exame<input name="exame" id="lbEx" placeholder="Ex.: Ultrassom abdominal"></label></div>`,
+    async (f) => { const m = ms.find((m) => m.id === f.modelo), nome = (f.exame || m?.nome || "").trim(); if (!nome) throw new Error("Escolha o modelo ou digite o nome do exame.");
+      setTimeout(() => emitirLaudo({ paciente: f.paciente.trim(), tutor: f.tutor.trim(), veterinario: f.vet, crmv: f.crmvSol, especie: f.especie, raca: f.raca, sexo: f.sexo, idade: f.idade, peso: f.peso }, { nome, realizadoEm: f.abre || hoje(), modeloId: f.modelo }, 0, profs), 50); }, "Continuar para o laudo");
+    $("#lbMod").onchange = () => { const m = ms.find((m) => m.id === $("#lbMod").value); if (m && !$("#lbEx").value) $("#lbEx").value = m.nome; };
     const mostra = () => { const q = norm($("#lbBusca").value); const r = todos.filter(({ x, e }) => !q || norm(`${x.paciente} ${x.tutor} ${e.nome}`).includes(q)).slice(0, 30);
-      $("#lbRes").innerHTML = r.map(({ x, e }, i) => `<button type="button" class="btn small" style="display:block;width:100%;text-align:left;margin:3px 0" data-i="${i}"><b>${esc(x.paciente)}</b> · ${esc(x.tutor || "")} — ${esc(e.nome)} <span class="muted">(${e.realizadoEm ? fmtData(dataDe(e)) : "sem data"} · ${esc(x.veterinario || "")})</span></button>`).join("") || "<p class='muted'>Nada encontrado.</p>";
+      $("#lbRes").innerHTML = r.map(({ x, e }, i) => `<button type="button" class="res-item" data-i="${i}"><b>${esc(x.paciente)}</b> · ${esc(x.tutor || "")} — ${esc(e.nome)}</button>`).join("") || `<span class="muted">Nada no histórico.</span>`;
       $("#lbRes").onclick = (ev) => { const b = ev.target.closest("[data-i]"); if (!b) return; const it = r[b.dataset.i]; fecharModal(); emitirLaudo(it.x, it.e, it.k, profs); }; };
-    $("#lbBusca").oninput = mostra; mostra(); };
+    $("#lbBusca").oninput = mostra; mostra();
+  };
   v.querySelectorAll("[data-m]").forEach((b) => (b.onclick = () => { const r = pend[b.dataset.m]; emitirLaudo(r.x, r.e, r.k, profs); }));
   v.querySelectorAll("[data-p]").forEach((b) => (b.onclick = () => anexarLaudoPdf(pend[b.dataset.p], profs)));
 }
