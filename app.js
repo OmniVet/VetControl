@@ -11,7 +11,7 @@ import { GRUPOS_MERCADO } from "./equivalencias-mercado.js";
 import { lerPlanilhaClinica, COLUNAS_MODELO, COLUNAS_SALAS, NOME_ABA } from "./importar-planilha.js";
 import { resolverCombinacoes } from "./busca-exames.js";
 import { montarBusca } from "./busca-catalogo.js";
-import { EXECUTORES_IMAGEM, EXAMES_IMAGEM } from "./firebase-config.js";
+import { EXECUTORES_IMAGEM, EXAMES_IMAGEM, EXAMES_IMAGEM_DETALHE } from "./firebase-config.js";
 import { firebaseConfig, MASTER_EMAIL, DISTRIBUIDORAS, MEDIDAS, SALAS, DIAS_ALERTA_VALIDADE, EXAMES, STATUS_EXAME, STATUS_REPOSICAO, INV_CATEGORIAS, INV_LOCAIS, INV_ESTADO, LABORATORIOS, CONVENIOS, ORIGENS, CLINICA, DIAS_SEM_USO, VACINAS, VACINAS_COMERCIAIS, DIAS_A_VENCER, DOMINIO_TUTOR, TIPOS_AMBULATORIO, TABELAS_PRECO, CATEGORIAS_SERVICO, VALIDADE_ORCAMENTO_DIAS, CATALOGO_INICIAL, GEMINI_API_KEY, GEMINI_MODEL, DIAS_ANALISE, DIAS_COBERTURA_MINIMO, DIAS_COBERTURA_IDEAL, GOOGLE_CSE_KEY, GOOGLE_CSE_CX } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
@@ -175,7 +175,7 @@ onAuthStateChanged(auth, async (u) => {
 window.addEventListener("hashchange", render);
 // Setores do Início (quadrados grandes). abas: [rota, nome]
 const SETORES = [
-  { id: "solic", mod: "exames", n: "1", titulo: "Solicitação de exames", icone: "🧪", abas: [["nova-solicitacao", "1.1 Nova solicitação de exames"], ["exames", "1.2 Consultar solicitações realizadas"], ["busca-exames", "1.3 Busca inteligente (menor preço)"]] },
+  { id: "solic", mod: "exames", n: "1", titulo: "Requisição de exames", icone: "🧪", abas: [["nova-solicitacao", "1.1 Nova requisição de exames"], ["exames", "1.2 Consultar requisições realizadas"], ["busca-exames", "1.3 Busca inteligente (menor preço)"]] },
   { id: "laudos", mod: "exames", n: "2", titulo: "Laudos", icone: "📝", abas: [["laudos-pendentes", "2.1 Liberar laudos"], ["modelos", "2.2 Modelos de laudos"], ["laudos-liberados", "2.3 Consultar laudos liberados"]] },
   { id: "historico", mod: "exames", n: "3", titulo: "Histórico de exames", icone: "📊", abas: [["planilha", "Exames laboratoriais"], ["prestadores", "Imagem e prestadores"], ["producao", "Produção por médico (semana)"], ["comparativo", "Comparativo com laboratório"], ["exportar-exames", "Exportar relatórios de exames"]] },
   { id: "compras", mod: "estoque", n: "4", titulo: "Solicitação de compras", icone: "🛒", abas: [["solicitacoes", "Pedir algo ao estoquista"]] },
@@ -1172,12 +1172,12 @@ let filtroEx = { status: "abertos", busca: "", pag: "", dest: "" };
 const destinoEx = (e) => (isPrest(e) ? "Imagem · " + (e.realizadoPor || "sem profissional") : "Lab · " + (e.laboratorio || "sem laboratório"));
 async function telaExames(v) {
   const todos = (await getDocs(query(collection(db, "exames"), orderBy("criadoEm", "desc")))).docs.map((d) => ({ id: d.id, ...d.data() }));
-  v.innerHTML = `<div class="barra"><h2>Solicitações realizadas</h2><a class="btn" href="#nova-solicitacao">+ Nova solicitação</a>
+  v.innerHTML = `<div class="barra"><h2>Requisições realizadas</h2><a class="btn" href="#nova-solicitacao">+ Nova requisição</a>
     <input id="bEx" placeholder="Buscar paciente, tutor, profissional, laboratório…" value="${esc(filtroEx.busca)}">
     <select id="fEx"><option value="abertos">Em aberto</option><option value="todos">Todos</option>${opts(STATUS_EXAME)}</select>
     <select id="pEx"><option value="">Particular + convênios</option><option>Particular</option>${opts(CONVENIOS)}</select>
     <select id="dEx"><option value="">Todos os laboratórios e profissionais</option>${[...new Set(todos.flatMap((x) => (x.exames || []).map(normEx).map(destinoEx)))].sort().map((d) => `<option>${esc(d)}</option>`).join("")}</select>
-    <button class="btn primary" id="novoEx">+ Nova solicitação</button></div>
+    <button class="btn primary" id="novoEx">+ Nova requisição</button></div>
   <div class="tabela-wrap"><table><thead><tr><th>Data</th><th>Paciente</th><th>Tutor</th><th>Exames · executor / laboratório</th><th>Pagamento</th><th>Solicitante</th><th>Status</th><th></th></tr></thead><tbody id="tbEx"></tbody></table></div>`;
   $("#fEx").value = filtroEx.status; $("#pEx").value = filtroEx.pag; $("#dEx").value = filtroEx.dest;
   const desenhar = () => {
@@ -1209,7 +1209,7 @@ async function telaExames(v) {
     if (b.dataset.st) modalStatusExame(x);
     if (b.dataset.pr) imprimirExame(x);
     if (b.dataset.ed) modalExame(x, profs);
-    if (b.dataset.dx && confirm("Excluir solicitação de exame?")) { await deleteDoc(doc(db, "exames", id)); render(); }
+    if (b.dataset.dx && confirm("Excluir requisição de exames?")) { await deleteDoc(doc(db, "exames", id)); render(); }
   };
 }
 
@@ -1223,26 +1223,31 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
   const cat = await carregarCatalogo();
   if (!cat.length) { toast("Cadastre o catálogo de exames primeiro (aba Catálogo de exames)."); location.hash = "#catalogo"; return; }
   let itens = (x.exames || []).map(normEx).map((e) => ({ ...e }));
-  let modoAdd = "Laboratorial", tipoReq = "Laboratorial";
+  const imgBase = new Map(); [...EXAMES_IMAGEM, ...EXAMES_IMAGEM_DETALHE, ...cat.filter(isPrest).map((c) => c.nome)].forEach((n) => { if (!imgBase.has(norm(n))) imgBase.set(norm(n), n); });
+  const lista = [...cat.filter((c) => !isPrest(c)), ...[...imgBase.values()].flatMap((n) => { const c0 = cat.find((c) => isPrest(c) && norm(c.nome) === norm(n)) || {};
+    return EXECUTORES_IMAGEM.map((p) => ({ ...c0, id: "img|" + n + "|" + p, catId: c0.id || slugId(n, "imagem"), nome: n, grupo: "Imagem", realizadoPor: p, tipo: "" })); })];
+  let modoAdd = "Todos", tipoReq = "Laboratorial";
   const pag0 = itens[0] ? { pagamento: itens[0].pagamento, convenio: itens[0].convenio } : { pagamento: "Particular", convenio: "" };
   const pagHeader = () => ($("#atend").value === "Plano" ? { pagamento: "Convênio", convenio: $("#plano").value } : { pagamento: "Particular", convenio: "" });
   const nomesProf = [...new Set([...EXECUTORES_IMAGEM, ...profs.map((p) => p.nome)])], vetIni = x.veterinario || meuProfissional(profs)?.nome || "";
-  abrirModal(x.id ? "Editar solicitação de exame" : "Nova solicitação de exame", `
-    <div class="duas"><label>Pagamento dos próximos exames<select name="atend" id="atend"><option>Particular</option><option value="Plano" ${(x.pagamento === "Convênio" || pag0.pagamento === "Convênio") ? "selected" : ""}>Plano de saúde</option></select></label>
-    <label id="planoBox" class="${pag0.pagamento === "Convênio" ? "" : "hidden"}">Qual plano<select name="plano" id="plano">${opts(CONVENIOS, pag0.convenio)}</select></label></div>
+  abrirModal(x.id ? "Editar requisição de exames" : "Nova requisição de exames", `
     <label>Prioridade<select name="prioridade">${opts(["Rotina", "Urgente"], x.prioridade)}</select></label>
     <div class="duas"><label>Nome e sobrenome do pet<input name="paciente" required value="${esc(x.paciente)}"></label>
     <label>Nome e sobrenome do tutor<input name="tutor" required value="${esc(x.tutor)}"></label></div>
-    <div class="duas"><label>Idade do pet<input name="idade" value="${esc(x.idade)}"></label>
-    <label>Veterinário solicitante<select name="veterinario" required><option value="">— escolha —</option>${[...new Set([...nomesProf, ...(vetIni ? [vetIni] : [])])].map((n) => `<option ${n === vetIni ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></label></div>
+    <div class="duas"><label>Espécie<input name="especie" list="dlEsp" value="${esc(x.especie)}" placeholder="Canina, Felina…"></label><label>Raça<input name="raca" value="${esc(x.raca)}"></label></div>
+    <datalist id="dlEsp"><option>Canina</option><option>Felina</option><option>Silvestre</option></datalist>
+    <div class="duas"><label>Sexo<input name="sexo" list="dlSexo" value="${esc(x.sexo)}"></label><label>Peso (kg)<input name="peso" value="${esc(x.peso)}"></label></div>
+    <datalist id="dlSexo"><option>Macho</option><option>Fêmea</option><option>Macho castrado</option><option>Fêmea castrada</option></datalist>
+    <div class="duas"><label>Idade do pet<input name="idade" value="${esc(x.idade)}"></label><label>Telefone do tutor<input name="telefone" value="${esc(x.telefone)}"></label></div>
+    <div class="duas"><label>Médico(a) veterinário(a) solicitante<input name="veterinario" value="${esc(x.veterinario)}" placeholder="digite o nome"></label><label>CRMV<input name="crmv" value="${esc(x.crmv)}" placeholder="digite o CRMV"></label></div>
     <label>📅 Data e hora da coleta<input type="datetime-local" name="dataColeta" id="dtColeta" required value="${esc(x.dataColeta || agoraLocal())}"></label>
-    <details style="margin:6px 0"><summary class="small">Mais dados do pet (espécie, raça, sexo, peso, telefone)</summary>
-    <div class="duas"><label>Espécie<select name="especie">${opts(["Canina", "Felina", "Silvestre", "Outra"], x.especie)}</select></label><label>Raça<input name="raca" value="${esc(x.raca)}"></label></div>
-    <div class="duas"><label>Sexo<select name="sexo">${opts(["Macho", "Fêmea", "Macho castrado", "Fêmea castrada"], x.sexo)}</select></label><label>Peso (kg)<input name="peso" value="${esc(x.peso)}"></label></div>
-    <label>Telefone do tutor<input name="telefone" value="${esc(x.telefone)}"></label></details>
-    <div class="barra"><b>Adicionar exame:</b><button type="button" class="btn small primary" id="mLab">🧪 Laboratorial</button><button type="button" class="btn small" id="mImg">🩻 Imagem</button></div>
-    <label id="lblBusca">Buscar exame (nome ou nome + laboratório, ex.: <i>albumina veter</i>)<input id="addCat" autocomplete="off" placeholder="Digite: hemograma, albumina veter, perfil…"></label>
-    <div id="resCat" class="res-cat"></div>
+    <div class="card" style="padding:10px"><b>➕ Adicionar exame à requisição</b>
+    <div class="duas"><label>Este exame é<select name="atend" id="atend"><option>Particular</option><option value="Plano" ${pag0.pagamento === "Convênio" ? "selected" : ""}>Plano de saúde</option></select></label>
+    <label id="planoBox" class="${pag0.pagamento === "Convênio" ? "" : "hidden"}">Qual plano<select name="plano" id="plano">${opts(CONVENIOS, pag0.convenio)}</select></label></div>
+    <div class="barra"><button type="button" class="btn small primary" id="mTodos">Todos</button><button type="button" class="btn small" id="mLab">🧪 Laboratoriais</button><button type="button" class="btn small" id="mImg">🩻 Imagem</button></div>
+    <label id="lblBusca">Buscar na lista (ex.: <i>albumina</i>, <i>ultrassom dhyego</i>, <i>colesterol veter</i>)<input id="addCat" autocomplete="off" placeholder="Digite para filtrar — a lista completa fica logo abaixo"></label>
+    <div id="resCat" class="res-cat" style="max-height:300px"></div>
+    <p class="muted small" style="margin:4px 0 0">Toque em um exame para incluir. Para outro com pagamento diferente, mude acima e toque no próximo.</p></div>
     <div id="itensEx"></div><div id="rodapeEx"></div>
     <label>Suspeita clínica / observações<textarea name="obs" rows="2">${esc(x.obs)}</textarea></label>`,
   async (f) => {
@@ -1253,7 +1258,7 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
       if (/vetplus/i.test(e.laboratorio || "") && e.laudo !== "SIM") e.laudoPendente = true; }); // VETPLUS = laudo feito aqui: vai para "Liberar laudos"
     const tipoDe = (g) => (g.every(isPrest) ? "Imagem" : g.some(isPrest) ? "Mista" : "Laboratorial"), grupos = [itens]; // uma REQUISIÇÃO DE EXAMES leva vários exames, de vários laboratórios/profissionais, cada um com seu pagamento
     const base = { paciente: f.paciente.trim(), especie: f.especie, raca: f.raca, idade: f.idade, peso: f.peso, sexo: f.sexo, tutor: f.tutor.trim(), telefone: f.telefone,
-      veterinario: f.veterinario, prioridade: f.prioridade, obs: f.obs, dataColeta: f.dataColeta };
+      veterinario: f.veterinario.trim(), crmv: (f.crmv || "").trim(), prioridade: f.prioridade, obs: f.obs, dataColeta: f.dataColeta };
     const origTipo = null;
     let iOrig = grupos.findIndex((g) => tipoDe(g) === origTipo); if (iOrig < 0) iOrig = 0;
     for (const [i, g] of grupos.entries()) {
@@ -1267,8 +1272,8 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
   $("#dtColeta").onchange = (ev) => { lerItens(); itens.forEach((e) => (e.realizadoEm = ev.target.value)); desenhar(); };
   const atualizaAtend = () => { $("#planoBox").classList.toggle("hidden", $("#atend").value !== "Plano"); };
   $("#atend").onchange = atualizaAtend; $("#plano").onchange = atualizaAtend;
-  const setModo = (m) => { modoAdd = m; $("#mLab").classList.toggle("primary", m === "Laboratorial"); $("#mImg").classList.toggle("primary", m === "Imagem"); $("#lblBusca").classList.toggle("hidden", m === "Imagem"); buscar(); };
-  $("#mLab").onclick = () => setModo("Laboratorial"); $("#mImg").onclick = () => setModo("Imagem");
+  const setModo = (m) => { modoAdd = m; $("#mTodos").classList.toggle("primary", m === "Todos"); $("#mLab").classList.toggle("primary", m === "Laboratorial"); $("#mImg").classList.toggle("primary", m === "Imagem"); buscar(); };
+  $("#mTodos").onclick = () => setModo("Todos"); $("#mLab").onclick = () => setModo("Laboratorial"); $("#mImg").onclick = () => setModo("Imagem");
   function lerItens() {
     $("#itensEx").querySelectorAll("[data-k]").forEach((r) => { const e = itens[r.dataset.k]; if (!e) return;
       e.realizadoEm = r.querySelector(".ih").value; e.pagamento = r.querySelector(".ip").value; e.convenio = e.pagamento === "Convênio" ? r.querySelector(".ic").value : "";
@@ -1297,19 +1302,18 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
         <div style="margin-top:6px"><b>Total:</b> ${Object.entries(tb.total).filter(([, n]) => n).map(([c, n]) => `<span class="tubo-bol" style="background:${COR_TUBO[c][1]}"></span> ${n} ${COR_TUBO[c][0]}`).join(" &nbsp; ") || "—"}</div></div>` : "");
   }
   function buscar() {
-    const q = norm($("#addCat").value).split(/\s+/).filter(Boolean);
-    if (!q.length && modoAdd !== "Imagem") { $("#resCat").innerHTML = ""; return; }
-    const r = cat.filter((c) => isPrest(c) === (modoAdd === "Imagem")).filter((c) => { const t = norm(`${c.nome} ${c.laboratorio || ""} ${c.categoria || ""}`); return q.every((w) => t.includes(w)); }).slice(0, 12);
-    $("#resCat").innerHTML = r.map((c) => `<button type="button" class="res-item" data-id="${c.id}"><b>${esc(c.nome)}</b> <span class="tag neutro">${esc(isPrest(c) ? "Imagem" : c.laboratorio)}</span> <span class="muted small">${esc(c.tipo && c.tipo !== "individual" ? c.tipo + " · " : "")}⏱ ${esc(prazoDe(c, isPrest(c)))}</span>${c.valor ? `<span style="float:right">${brl(c.valor)}</span>` : ""}</button>`).join("") || `<p class="muted small">Nada encontrado${modoAdd === "Imagem" ? " em exames de imagem (cadastre em Catálogo de exames)" : ""}.</p>`;
+    const q = norm($("#addCat").value).split(/\s+/).filter(Boolean), nl = (c) => norm(`${c.nome} ${c.laboratorio || ""} ${c.categoria || ""} ${c.realizadoPor || ""}`);
+    const r = lista.filter((c) => (modoAdd === "Todos" || isPrest(c) === (modoAdd === "Imagem")) && (() => { const t = nl(c); return q.every((w) => t.includes(w)); })());
+    $("#resCat").innerHTML = r.map((c) => `<button type="button" class="res-item" data-id="${esc(c.id)}"><b>${esc(c.nome)}</b> <span class="tag neutro">${esc(isPrest(c) ? "Imagem" + (c.realizadoPor ? " · " + c.realizadoPor : "") : c.laboratorio)}</span> <span class="muted small">${esc(c.tipo && c.tipo !== "individual" ? c.tipo + " · " : "")}⏱ ${esc(prazoDe(c, isPrest(c)))}</span>${c.valor ? `<span style="float:right">${brl(c.valor)}</span>` : ""}</button>`).join("") || `<p class="muted small">Nada encontrado na lista.</p>`;
   }
   $("#addCat").oninput = buscar;
   $("#resCat").onclick = (e) => {
-    const b = e.target.closest("[data-id]"); if (!b) return; const c = cat.find((c) => c.id === b.dataset.id); if (!c) return;
-    lerItens(); const ph = pagHeader(); itens.push({ realizadoEm: $("#dtColeta").value || agoraLocal(), catId: c.id, nome: c.nome, grupo: c.grupo, laboratorio: isPrest(c) ? "" : c.laboratorio, pontos: Number(c.pontos || 1), pagamento: ph.pagamento, convenio: ph.convenio,
+    const b = e.target.closest("[data-id]"); if (!b) return; const c = lista.find((c) => c.id === b.dataset.id); if (!c) return;
+    lerItens(); const ph = pagHeader(); itens.push({ realizadoEm: $("#dtColeta").value || agoraLocal(), catId: c.catId || c.id, nome: c.nome, grupo: c.grupo, realizadoPor: c.realizadoPor || "", laboratorio: isPrest(c) ? "" : c.laboratorio, pontos: Number(c.pontos || 1), pagamento: ph.pagamento, convenio: ph.convenio,
       valor: c.valor || 0, tubos: c.tubos || null, analitos: c.analitos || 0, prazo: c.prazo || "", composicao: c.composicao || [], coleta: isPrest(c) ? null : { status: "Aguardando" } });
     $("#addCat").value = ""; buscar(); desenhar();
   };
-  desenhar(); setModo("Laboratorial");
+  desenhar(); setModo("Todos");
 }
 
 function modalStatusExame(x) {
@@ -1321,21 +1325,21 @@ function modalStatusExame(x) {
 }
 
 function imprimirExame(x) {
-  abrirModal("Imprimir solicitação", `<label>Formato<select name="fmt"><option value="a4">Folha A4</option><option value="80">Bobina 80 mm</option><option value="58">Bobina 58 mm</option></select></label>
+  abrirModal("Imprimir requisição", `<label>Formato<select name="fmt"><option value="a4">Folha A4</option><option value="80">Bobina 80 mm</option><option value="58">Bobina 58 mm</option></select></label>
     <label style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" name="ass" checked> Incluir assinatura digital do solicitante (se cadastrada)</label>`,
-  async (f) => { const profs = await carregarProfissionais(); docImpressao(htmlSolicitacao(x, f.fmt !== "a4", f.ass ? profs.find((p) => p.nome === x.veterinario) : null), f.fmt, "Solicitação - " + x.paciente); }, "Imprimir");
+  async (f) => { const profs = await carregarProfissionais(); docImpressao(htmlSolicitacao(x, f.fmt !== "a4", f.ass ? profs.find((p) => p.nome === x.veterinario) : null), f.fmt, "Requisição - " + x.paciente); }, "Imprimir");
 }
 function htmlSolicitacao(x, bob, prof) {
   const ex = x.exames.map(normEx);
   return `<div class="cab"><b>${esc(CLINICA.nome)}</b>${bob ? "" : `<br><small>${esc(CLINICA.endereco)} · ${esc(CLINICA.telefone)}</small>`}</div>
-  <h1>Solicitação de exames${x.prioridade === "Urgente" ? " — URGENTE" : ""}</h1>
+  <h1>Requisição de exames${x.prioridade === "Urgente" ? " — URGENTE" : ""}</h1>
   <p><b>Paciente:</b> ${esc(x.paciente)} (${esc([x.especie, x.raca, x.sexo, x.idade, x.peso && x.peso + " kg"].filter(Boolean).join(", "))})<br><b>Tutor:</b> ${esc(x.tutor)} ${esc(x.telefone || "")}<br><b>Solicitado em:</b> ${fmtTs(x.criadoEm)}</p>
   <table>${ex.map((e) => { const v = valorLinha(e); return `<tr><td><b>${esc(e.nome)}</b><br><small>${isPrest(e) ? esc(e.realizadoPor || "") : esc(e.laboratorio || "")} · ${esc(origemDe(e, x))}${e.realizadoEm ? " · " + new Date(e.realizadoEm).toLocaleString("pt-BR").slice(0, 17) : ""} · liberação: ${esc(prazoDe(e, isPrest(e)))}</small>${e.pa?.some(Boolean) ? `<br><small>Pressão arterial (mmHg): ${e.pa.filter(Boolean).join(" · ")}</small>` : ""}</td>${v != null ? `<td style="text-align:right;white-space:nowrap">${brl(v)}</td>` : ""}</tr>`; }).join("")}</table>
   ${ex.some((e) => valorLinha(e) != null) ? `<p style="text-align:right"><b>Total particular: ${brl(ex.reduce((s, e) => s + (valorLinha(e) || 0), 0))}</b></p>` : ""}
-  ${x.obs ? `<p><b>Obs.:</b> ${esc(x.obs)}</p>` : ""}${assinaturaHtml(prof, x.veterinario)}`;
+  ${x.obs ? `<p><b>Obs.:</b> ${esc(x.obs)}</p>` : ""}${assinaturaHtml(prof, x.veterinario, x.crmv)}`;
 }
-function assinaturaHtml(prof, nome) {
-  return `<div class="ass ${prof?.assinatura ? "" : "sem"}">${prof?.assinatura ? `<img src="${prof.assinatura}">` : ""}<div class="linha">${esc(prof?.nome || nome || "")}<br><small>Médico(a) Veterinário(a)${prof?.crmv ? " · CRMV " + esc(prof.crmv) : ""}</small></div></div>`;
+function assinaturaHtml(prof, nome, crmv) {
+  return `<div class="ass ${prof?.assinatura ? "" : "sem"}">${prof?.assinatura ? `<img src="${prof.assinatura}">` : ""}<div class="linha">${esc(prof?.nome || nome || "")}<br><small>Médico(a) Veterinário(a)${(prof?.crmv || crmv) ? " · CRMV " + esc(prof?.crmv || crmv) : ""}</small></div></div>`;
 }
 function docImpressao(corpo, fmt, titulo) {
   const bob = fmt !== "a4", larg = fmt === "58" ? "54mm" : "74mm";
@@ -2701,9 +2705,9 @@ async function telaBuscaExames(v) {
     $("#beLabs").innerHTML = LABS.map((l) => `<button class="be-chip ${buscaOff.has(l) ? "off" : "on"}" data-lab="${esc(l)}">${esc(l)}</button>`).join("");
   };
   const desenharSug = () => {
-    const q = norm($("#beQ").value.trim()), box = $("#beSug"); if (q.length < 2) { box.innerHTML = ""; return; }
-    const ws = q.split(/\s+/), r = IDS.filter((c) => !buscaSel.includes(c) && ws.every((w) => norm(LB[c]).includes(w))).slice(0, 30);
-    box.innerHTML = r.length ? `<div class="be-sug">${r.map((c) => `<button data-add="${esc(c)}">${esc(LB[c])}</button>`).join("")}</div>` : `<p class="muted small">Nenhum exame com esse nome.</p>`;
+    const q = norm($("#beQ").value.trim()), box = $("#beSug");
+    const ws = q.split(/\s+/).filter(Boolean), r = IDS.filter((c) => !buscaSel.includes(c) && ws.every((w) => norm(LB[c]).includes(w)));
+    box.innerHTML = r.length ? `<div class="be-sug" style="max-height:260px">${r.map((c) => `<button data-add="${esc(c)}">${esc(LB[c])}</button>`).join("")}</div>` : `<p class="muted small">Nenhum exame com esse nome.</p>`;
   };
   let resultado = [];
   const desenharResultado = () => {
@@ -2721,7 +2725,7 @@ async function telaBuscaExames(v) {
         ${its.map((i) => `<div class="be-it"><span>${i[3] === "Perfis/Painéis" ? "<b>Perfil/painel</b> " : ""}${esc(i[0])} <span class="tag neutro">${esc(i[1])}</span> <span class="muted small">${esc(prazoDe(i[6]))}</span>${i[3] === "Perfis/Painéis" ? `<div class="muted small">${i[4].map((c) => esc(LB[c] || c)).join(", ")}</div>` : ""}</span><b>${rs(i[2])}</b></div>`).join("")}
         ${extra.length ? `<p class="muted small" style="margin:8px 0 0">Exames extras incluídos sem pedir: ${extra.map((c) => esc(LB[c])).join(", ")}.</p>` : ""}
         <div class="be-tubes">${tb.labs.map((l) => `<div class="be-labbox"><b>${esc(l.lab)}</b>${["roxo", "vermelho", "cinza", "azul", "outro"].filter((t) => l[t]).map((t) => `<div class="be-tl"><span class="be-dot" style="background:${COR_TUBO[t][1]}"></span>${COR_TUBO[t][0]}<b>${l[t]}</b></div>`).join("")}<p class="muted small" style="margin:4px 0 0">${esc(l.comentario)}</p></div>`).join("")}</div>
-        <div class="barra" style="margin:10px 0 0"><button class="btn primary" data-usar="${k}">➡ Usar na solicitação</button><button class="btn" data-copy="${k}">Copiar lista</button></div></div></div>`;
+        <div class="barra" style="margin:10px 0 0"><button class="btn primary" data-usar="${k}">➡ Usar na requisição</button><button class="btn" data-copy="${k}">Copiar lista</button></div></div></div>`;
     }).join("") + `<p class="muted small">Valores = valor cobrado pela Vet Plus. Perfis são comparados pelos exames que os compõem, mesmo com nomes diferentes entre laboratórios.</p>`;
   };
   const atualizar = () => { desenharTopo(); desenharSug(); desenharResultado(); };
@@ -2747,9 +2751,9 @@ async function telaBuscaExames(v) {
 /* ================= 1.1 NOVA SOLICITAÇÃO (tela própria) ================= */
 async function telaNovaSolicitacao(v) {
   const profs = await carregarProfissionais();
-  v.innerHTML = `<div class="card grande-acao"><span style="font-size:3rem">🧪</span><h2>Nova solicitação de exames</h2>
+  v.innerHTML = `<div class="card grande-acao"><span style="font-size:3rem">🧪</span><h2>Nova requisição de exames</h2>
     <p class="muted">Dados do pet e do tutor, quem está solicitando, data da coleta e, em cada exame, se é particular ou qual plano.<br>Exames para o <b>LAB VETPLUS</b> e de imagem vão automaticamente para <b>Laudos → Liberar laudos</b>.</p>
-    <button class="btn primary grande" id="abrirForm">+ Preencher nova solicitação</button> <a class="btn grande" href="#busca-exames">💡 Busca inteligente (menor preço)</a></div>`;
+    <button class="btn primary grande" id="abrirForm">+ Preencher nova requisição</button> <a class="btn grande" href="#busca-exames">💡 Busca inteligente (menor preço)</a></div>`;
   const pre = preSolicitacao; preSolicitacao = null; // vindo da Busca inteligente: já traz os exames, os laboratórios e a coleta sugerida
   const abrir = () => modalExame(pre ? { exames: pre.exames, obs: pre.obs } : {}, profs, { aposSalvar: () => (location.hash = "#exames") });
   $("#abrirForm").onclick = abrir; abrir();
