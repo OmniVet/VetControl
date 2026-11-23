@@ -1346,7 +1346,7 @@ function htmlSolicitacao(x, bob, prof) {
 function assinaturaHtml(prof, nome, crmv) {
   return `<div class="ass ${prof?.assinatura ? "" : "sem"}">${prof?.assinatura ? `<img src="${prof.assinatura}">` : ""}<div class="linha">${esc(prof?.nome || nome || "")}<br><small>Médico(a) Veterinário(a)${(prof?.crmv || crmv) ? " · CRMV " + esc(prof?.crmv || crmv) : ""}</small></div></div>`;
 }
-function docImpressao(corpo, fmt, titulo) {
+function docImpressao(corpo, fmt, titulo, extraCss = "") {
   const bob = fmt !== "a4", larg = fmt === "58" ? "54mm" : "74mm";
   const w = window.open("", "_blank");
   w.document.write(`<html><head><title>${esc(titulo)}</title><style>
@@ -1358,6 +1358,7 @@ function docImpressao(corpo, fmt, titulo) {
     .texto{white-space:pre-wrap;line-height:1.5}
     .ass{margin-top:${bob ? "20px" : "50px"};text-align:center}.ass img{max-height:70px;max-width:220px;display:block;margin:0 auto -8px}
     .ass.sem{margin-top:${bob ? "8px" : "22px"}}.linha{border-top:1px solid #000;display:inline-block;padding-top:4px;min-width:${bob ? "90%" : "260px"}}
+    ${extraCss}
   </style></head><body>${corpo}<script>window.onload=()=>print()<\/script></body></html>`);
   w.document.close();
 }
@@ -1648,21 +1649,49 @@ async function emitirLaudo(x, e, k, profs) {
     const ass = form.assImg.files[0] ? await comprimirAssinatura(form.assImg.files[0]) : f.usaAss ? p.assinatura || "" : "";
     const imagens = []; for (const fl of [...form.imgs.files].slice(0, 4)) imagens.push(await comprimirImagem(fl));
     if (JSON.stringify(imagens).length + ass.length > 800000) throw new Error("Imagens muito pesadas. Use menos imagens ou imagens menores.");
-    const ref = await addDoc(collection(db, "laudos"), { exameId: x.id || "", k, paciente: x.paciente, tutor: x.tutor, solicitante: x.veterinario || "", dataAbertura: f.dataAbertura || "", pacienteAvulso: !x.id, exame: e.nome, texto: f.texto, profissionalId: p.id, profissional: p.nome, crmv: p.crmv || "",
+    const ref = await addDoc(collection(db, "laudos"), { exameId: x.id || "", k, paciente: x.paciente, tutor: x.tutor, solicitante: x.veterinario || "", crmvSolicitante: x.crmv || "", especie: x.especie || "", raca: x.raca || "", sexo: x.sexo || "", idade: x.idade || "", peso: x.peso || "", dataAbertura: f.dataAbertura || "", pacienteAvulso: !x.id, exame: e.nome, texto: f.texto, profissionalId: p.id, profissional: p.nome, crmv: p.crmv || "",
       assinatura: ass, imagens, dataLaudo: f.dataLaudo, liberadoPor: usuario.nome, liberadoEm: serverTimestamp() });
     if (x.id) { await salvarCampo(x.id, k, "laudoId", ref.id); await salvarCampo(x.id, k, "laudo", "SIM"); }
-    imprimirLaudo({ paciente: x.paciente, tutor: x.tutor, solicitante: x.veterinario, dataAbertura: f.dataAbertura, exame: e.nome, texto: f.texto, profissional: p.nome, crmv: p.crmv, assinatura: ass, imagens, dataLaudo: f.dataLaudo, liberadoEm: null }, f.fmt);
+    imprimirLaudo({ paciente: x.paciente, tutor: x.tutor, solicitante: x.veterinario, crmvSolicitante: x.crmv, especie: x.especie, raca: x.raca, sexo: x.sexo, idade: x.idade, peso: x.peso, dataAbertura: f.dataAbertura, exame: e.nome, texto: f.texto, profissional: p.nome, crmv: p.crmv, assinatura: ass, imagens, dataLaudo: f.dataLaudo, liberadoEm: null }, f.fmt);
     toast("Laudo liberado e salvo.");
   }, "Liberar laudo e imprimir");
   const aplicar = () => { const m = ms.find((m) => m.id === $("#lMod").value); const p = permitidos.find((p) => p.id === $("#lProf").value); $("#lTxt").value = preencher(m?.conteudo || (ehPA(e) ? "Aferição de pressão arterial sistólica\nPaciente: {{paciente}} — Tutor: {{tutor}}\n\n{{pa}}\n\nObservações:\n" : ""), p); };
   $("#lMod").onchange = aplicar; $("#lProf").onchange = aplicar; $("#lAbre").onchange = aplicar; aplicar();
 }
+const LAUDO_CSS = `body{font-family:Georgia,"Times New Roman",serif;font-size:12.5px;color:#1c2733;max-width:182mm}
+ .lh{display:flex;align-items:center;gap:14px;border-bottom:3px solid #1565c0;padding-bottom:10px}.lh img{max-height:78px;max-width:150px}
+ .lh .dados{flex:1;text-align:right;font-family:Arial,sans-serif;font-size:10.5px;color:#456;line-height:1.5}.lh .dados b{display:block;font-size:15px;color:#0d3c78;margin-bottom:2px}
+ .faixa{background:#0d3c78;color:#fff;font-family:Arial,sans-serif;text-align:center;padding:7px;margin:12px 0 10px;font-size:15px;letter-spacing:1.5px;text-transform:uppercase;border-radius:3px}
+ .pac{display:grid;grid-template-columns:1fr 1fr;gap:4px 18px;border:1px solid #c5d3e8;background:#f4f8fd;border-radius:6px;padding:9px 12px;font-family:Arial,sans-serif;font-size:11.5px;margin-bottom:12px}
+ .pac span{color:#567}.pac b{color:#102a4c}
+ .res{line-height:1.6;font-size:13px}.res h2{font-family:Arial,sans-serif;font-size:12.5px;color:#0d3c78;border-bottom:1px solid #b9cbe6;margin:14px 0 4px;padding-bottom:2px;text-transform:uppercase;letter-spacing:.6px}
+ .res p{margin:2px 0}.res .k{font-weight:bold;color:#14325c}
+ .imgs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}.imgs img{width:100%;max-height:250px;object-fit:contain;border:1px solid #c5d3e8;border-radius:4px;padding:3px}
+ .datas{font-family:Arial,sans-serif;font-size:10.5px;color:#567;text-align:right;margin-top:16px}
+ .rod{margin-top:18px;border-top:1px solid #c5d3e8;padding-top:5px;text-align:center;font-family:Arial,sans-serif;font-size:9.5px;color:#789}
+ .ass{margin-top:34px!important}.linha{border-top:1px solid #1c2733!important}`;
+function formatarLaudo(t) {
+  return String(t || "").split(/\r?\n/).map((ln) => { const s = ln.trim(); if (!s || /^[=\-_*]{3,}$/.test(s)) return s ? "" : `<p>&nbsp;</p>`;
+    if (/^[A-ZÁÉÍÓÚÂÊÔÃÕÇ0-9 \/()+,.\-–]{4,60}:?$/.test(s) && /[A-ZÁÉÍÓÚÂÊÔÃÕÇ]{3}/.test(s)) return `<h2>${esc(s.replace(/:$/, ""))}</h2>`;
+    const m = s.match(/^([^:]{2,45}):\s*(.*)$/); if (m) return `<p><span class="k">${esc(m[1])}:</span> ${esc(m[2])}</p>`;
+    return `<p>${esc(s)}</p>`; }).join("");
+}
 function imprimirLaudo(l, fmt = "a4") {
-  docImpressao(`<div class="cab"><img src="${new URL(CLINICA.logoLaudo || "logo-vetplus.png", location.href).href}" alt="" style="max-height:70px;display:block;margin:0 auto 4px" onerror="this.remove()"><b>${esc(CLINICA.nome)}</b><br><small>${[CLINICA.cnpj && "CNPJ " + CLINICA.cnpj, CLINICA.endereco, CLINICA.telefone && "Tel. " + CLINICA.telefone, CLINICA.whatsapp && "WhatsApp " + CLINICA.whatsapp].filter(Boolean).map(esc).join(" · ")}</small></div>
-    <h1>Laudo — ${esc(l.exame)}</h1><div class="texto">${esc(l.texto)}</div>
-    ${(l.imagens || []).length ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">${l.imagens.map((s) => `<img src="${s}" style="width:100%;max-height:260px;object-fit:contain;border:1px solid #ccc">`).join("")}</div>` : ""}
-    <p style="text-align:right;margin-top:20px"><small>${l.dataAbertura ? "Requisição aberta em: " + fmtData(l.dataAbertura) + " · " : ""}${l.solicitante ? "Solicitante: " + esc(l.solicitante) + " · " : ""}Data do laudo: ${l.dataLaudo ? fmtData(l.dataLaudo) : l.liberadoEm?.toDate ? l.liberadoEm.toDate().toLocaleDateString("pt-BR") : new Date().toLocaleDateString("pt-BR")}</small></p>
+  const dtLaudo = l.dataLaudo ? fmtData(l.dataLaudo) : l.liberadoEm?.toDate ? l.liberadoEm.toDate().toLocaleDateString("pt-BR") : new Date().toLocaleDateString("pt-BR");
+  if (fmt !== "a4") return docImpressao(`<div class="cab"><b>${esc(CLINICA.nome)}</b></div><h1>Laudo — ${esc(l.exame)}</h1><p><b>${esc(l.paciente)}</b> · ${esc(l.tutor || "")}</p><div class="texto">${esc(l.texto)}</div><p style="text-align:right"><small>${dtLaudo}</small></p>
     ${assinaturaHtml({ nome: l.profissional, crmv: l.crmv, assinatura: l.assinatura })}`, fmt, `Laudo ${l.exame} - ${l.paciente}`);
+  const pet = [l.especie, l.raca, l.sexo, l.idade, l.peso && l.peso + " kg"].filter(Boolean).join(" · ");
+  const logo = new URL(CLINICA.logoLaudo || "logo-vetplus.png", location.href).href;
+  docImpressao(`<div class="lh"><img src="${logo}" alt="" onerror="this.remove()"><div class="dados"><b>${esc(CLINICA.nome)}</b>${[CLINICA.cnpj && "CNPJ " + CLINICA.cnpj, CLINICA.endereco, [CLINICA.telefone && "Tel. " + CLINICA.telefone, CLINICA.whatsapp && "WhatsApp " + CLINICA.whatsapp].filter(Boolean).join(" · ")].filter(Boolean).map(esc).join("<br>")}</div></div>
+    <div class="faixa">Laudo — ${esc(l.exame)}</div>
+    <div class="pac"><div><span>Paciente:</span> <b>${esc(l.paciente)}</b></div><div><span>Tutor:</span> <b>${esc(l.tutor || "—")}</b></div>
+      ${pet ? `<div style="grid-column:1/3"><span>Espécie / raça / sexo / idade / peso:</span> <b>${esc(pet)}</b></div>` : ""}
+      <div><span>Médico(a) solicitante:</span> <b>${esc(l.solicitante || "—")}${l.crmvSolicitante ? " · CRMV " + esc(l.crmvSolicitante) : ""}</b></div><div><span>Requisição aberta em:</span> <b>${l.dataAbertura ? fmtData(l.dataAbertura) : "—"}</b></div></div>
+    <div class="res">${formatarLaudo(l.texto)}</div>
+    ${(l.imagens || []).length ? `<div class="imgs">${l.imagens.map((s) => `<img src="${s}">`).join("")}</div>` : ""}
+    <div class="datas">Laudo liberado em <b>${dtLaudo}</b></div>
+    ${assinaturaHtml({ nome: l.profissional, crmv: l.crmv, assinatura: l.assinatura })}
+    <div class="rod">${esc(CLINICA.nome)} · ${esc(CLINICA.endereco || "")} · Este laudo deve ser interpretado pelo médico veterinário responsável.</div>`, fmt, `Laudo ${l.exame} - ${l.paciente}`, LAUDO_CSS);
 }
 async function verLaudo(id) { const d = await getDoc(doc(db, "laudos", id)); if (d.exists()) abrirLaudo(d.data()); }
 function abrirLaudo(l) {
