@@ -138,3 +138,6 @@ export const EXECUTORES_IMAGEM = ["João Paulo", "Alisson", "Dhyego", "Rodrigo N
 // Exames de imagem detalhados que aparecem na lista da Requisição (um para cada profissional). Edite à vontade.
 export const EXAMES_IMAGEM_DETALHE = ["Ultrassom abdominal", "Ultrassom gestacional", "Raio-X tórax", "Raio-X laringe", "Raio-X abdome", "Raio-X coluna", "Raio-X membros", "Elastografia"];
 export const EXAMES_IMAGEM = ["Raio-X", "Ultrassom", "Eletrocardiograma", "Ecocardiograma", "Pressão arterial"];
+
+// E-mail do atendimento VetPlus: o botão "Enviar por e-mail" do laudo abre o e-mail já endereçado para ele. Preencha aqui.
+export const EMAIL_ATENDIMENTO = "";

@@ -99,7 +99,9 @@ service cloud.firestore {
     // Laudos liberados não podem ser alterados (só o master corrige)
     match /laudos/{id} {
       allow read, create: if ativo();
-      allow update, delete: if master();
+      // só quem liberou o laudo pode editá-lo; só o master apaga
+      allow update: if ativo() && resource.data.liberadoUid == request.auth.uid;
+      allow delete: if master();
     }
 
     match /servicos/{id} {
@@ -180,13 +182,15 @@ service cloud.firestore {
       allow update: if false;
     }
     // Avaliações: SÓ o master lê e escreve
+    // Avaliações: Master e Gerente veem e editam; a pessoa avaliada só lê a própria
     match /timeAvaliacoes/{id} {
-      allow read, write: if master();
+      allow read: if master() || gerente() || (ativo() && resource.data.pessoaId == request.auth.uid);
+      allow write: if master() || gerente();
     }
     // Confirmação/assinatura: o master cria; a própria pessoa só assina (uma vez); ninguém apaga
     match /timeAssinaturas/{id} {
-      allow read: if master() || (ativo() && resource.data.pessoaId == request.auth.uid);
-      allow create: if master();
+      allow read: if master() || gerente() || (ativo() && resource.data.pessoaId == request.auth.uid);
+      allow create: if master() || gerente();
       allow update: if ativo() && resource.data.pessoaId == request.auth.uid && resource.data.status == "Aguardando"
         && request.resource.data.status == "Assinado" && request.resource.data.assinadoEm == request.time
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "assinadoEm", "hash"]);
@@ -210,6 +214,11 @@ service cloud.firestore {
     }
 
     // Entrevistas de candidatos (dados pessoais): só master e gerente
+    // Repasse ou venda (empréstimo/venda de produtos do estoque)
+    match /repasses/{id} {
+      allow read, create, update: if ativo();
+      allow delete: if master();
+    }
     match /entrevistas/{id} {
       allow read, write: if master() || gerente();
     }

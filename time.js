@@ -94,9 +94,9 @@ export function iniciarTime(c) {
   }
 
   async function telaRelatorios(v) {
-    const me = eu(), master = isMaster(); let mes = mesAtual();
+    const me = eu(), master = isMaster() || me.cargo === "gerente"; let mes = mesAtual(); // "master" aqui = gestão (Master ou Gerente)
     const [pes, ats, ass] = await Promise.all([pessoas(), lista("timeAtividades"), master ? lista("timeAssinaturas") : lista("timeAssinaturas", where("pessoaId", "==", me.uid))]);
-    const avs = master ? await lista("timeAvaliacoes") : [];
+    const avs = master ? await lista("timeAvaliacoes") : await lista("timeAvaliacoes", where("pessoaId", "==", me.uid));
     v.innerHTML = `<div class="barra"><h2>Relatórios e histórico do time</h2><label class="inline">Mês <input type="month" id="trMes" value="${mes}"></label>
       ${master ? `<button class="btn primary" id="trPlano">+ Planejar avaliação</button>` : ""}</div>
       ${master && pes.some((p) => !p.cargo) ? `<p class="aviso-ctrl small">Há pessoas sem cargo definido. Defina em Configurações → Usuários para entrarem (ou não) nas avaliações.</p>` : ""}${master ? `<p class="muted small">🔒 As avaliações só aparecem para o Gerente/Master. A pessoa avaliada vê apenas o próprio percentual e a confirmação para assinar.</p>` : ""}<div id="trCorpo"></div>`;
@@ -112,6 +112,7 @@ export function iniciarTime(c) {
         ${master ? `<h3>Avaliações (só gestão)</h3><table><thead><tr><th>Pessoa</th><th>Período</th><th>Data e hora</th><th>Situação</th><th></th></tr></thead><tbody>${avs.sort((a, b) => String(b.dataHora).localeCompare(String(a.dataHora))).map((a) => {
           const s = ass.find((x) => x.id === a.assinaturaId); return `<tr><td>${esc(a.pessoaNome)}</td><td>${esc(a.periodo)}</td><td>${esc(br(a.dataHora))} ${esc(String(a.dataHora).slice(11, 16))}</td>
           <td>${esc(a.status)}${s ? ` · ${s.status === "Assinado" ? "assinada" : "aguardando assinatura"}` : ""}</td><td class="acoes-linha"><button class="btn small" data-v="${a.id}">${a.status === "Agendada" ? "Aplicar" : "Ver / editar"}</button><button class="btn small" data-ia="${a.id}">Copiar resumo p/ IA</button></td></tr>`; }).join("") || `<tr><td colspan="5" class="muted">Nenhuma avaliação planejada.</td></tr>`}</tbody></table>` : ""}
+        ${!master && avs.length ? `<h3>Minhas avaliações</h3><table><thead><tr><th>Período</th><th>Conversa</th><th>Situação</th><th>Feedback</th></tr></thead><tbody>${avs.map((a) => `<tr><td>${esc(a.periodo)}</td><td>${esc(br(a.dataHora))}</td><td>${esc(a.status)}</td><td class="small">${esc(a.feedback || "—")}</td></tr>`).join("")}</tbody></table>` : ""}
         <h3>${master ? "Confirmações e assinaturas" : "Minhas confirmações de avaliação"}</h3><table><thead><tr><th>Pessoa</th><th>Período</th><th>Conversa</th><th>Assinatura</th><th></th></tr></thead><tbody>${ass.map(assHtml).join("") || `<tr><td colspan="5" class="muted">Nada por aqui ainda.</td></tr>`}</tbody></table>`;
     };
     $("#trMes").onchange = (e) => { mes = e.target.value || mes; desenhar(); };
