@@ -191,6 +191,7 @@ const SETORES = [
   { id: "orcamentos", mod: "ambul", n: "8", titulo: "Orçamentos", icone: "💰", abas: [["orcamentos", "8.1 Histórico de orçamentos"], ["orcamento", "8.2 Novo orçamento"], ["servicos", "8.3 Banco de serviços"], ["pacotes", "Pacotes"]] },
   { id: "time-agenda", mod: "time", n: "", titulo: "Agenda de atividades do time", icone: "📋", abas: [["time-agenda", "Agenda de atividades"]] },
   { id: "time-relatorios", mod: "time", n: "", titulo: "Relatórios e histórico do time", icone: "📑", abas: [["time-relatorios", "Relatórios, avaliações e assinaturas"]] },
+  { id: "time-cargos", mod: "time", n: "", titulo: "Descrições de cargo", icone: "📄", abas: [["time-cargos", "Descrição de cargo por função"]] },
   { id: "time-presenca", mod: "time", n: "", titulo: "Presença do time", icone: "⏱", abas: [["time-presenca", "Registro e espelho de presença"]] },
   { id: "entrevista", mod: "entrevista", n: "", titulo: "Entrevistas", icone: "🗣️", entrevista: true, abas: [["entrevista", "Entrevistas por tipo de vaga"]] },
 ];

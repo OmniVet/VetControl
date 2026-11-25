@@ -140,4 +140,4 @@ export const EXAMES_IMAGEM_DETALHE = ["Ultrassom abdominal", "Ultrassom gestacio
 export const EXAMES_IMAGEM = ["Raio-X", "Ultrassom", "Eletrocardiograma", "Ecocardiograma", "Pressão arterial"];
 
 // E-mail do atendimento VetPlus: o botão "Enviar por e-mail" do laudo abre o e-mail já endereçado para ele. Preencha aqui.
-export const EMAIL_ATENDIMENTO = "";
+export const EMAIL_ATENDIMENTO = "atendimentovetplus@gmail.com";

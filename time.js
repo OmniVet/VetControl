@@ -1,5 +1,6 @@
 // "Nosso time": agenda de atividades, relatórios/avaliações (só master) e presença (ponto).
 // Recebe do app.js as ferramentas prontas (banco, janelas, impressão…) para não repetir código.
+import { NOTAS, LEGENDA, FAIXAS, faixaDe, pctDe, fichaDoCargo, NOME_FICHA, PERGUNTAS_AVALIADO, DESCRICOES } from "./cargos-rh.js";
 export function iniciarTime(c) {
   const { db, fb, $, esc, toast, abrirModal, opts, hoje, eu, isMaster, docImpressao, sha256, entrarComSenha, CRITERIOS, CLINICA_NOME, cltDe } = c;
   const { collection, doc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, serverTimestamp } = fb;
@@ -98,7 +99,7 @@ export function iniciarTime(c) {
     const [pes, ats, ass] = await Promise.all([pessoas(), lista("timeAtividades"), master ? lista("timeAssinaturas") : lista("timeAssinaturas", where("pessoaId", "==", me.uid))]);
     const avs = master ? await lista("timeAvaliacoes") : await lista("timeAvaliacoes", where("pessoaId", "==", me.uid));
     v.innerHTML = `<div class="barra"><h2>Relatórios e histórico do time</h2><label class="inline">Mês <input type="month" id="trMes" value="${mes}"></label>
-      ${master ? `<button class="btn primary" id="trPlano">+ Planejar avaliação</button>` : ""}</div>
+      ${master ? `<button class="btn primary" id="trPlano">+ Planejar avaliação</button>${Object.entries(NOME_FICHA).map(([id, n]) => `<button class="btn small" data-fb="${id}">🖨 Ficha em branco: ${esc(n)}</button>`).join("")}` : ""}</div>
       ${master && pes.some((p) => !p.cargo) ? `<p class="aviso-ctrl small">Há pessoas sem cargo definido. Defina em Configurações → Usuários para entrarem (ou não) nas avaliações.</p>` : ""}${master ? `<p class="muted small">🔒 As avaliações só aparecem para o Gerente/Master. A pessoa avaliada vê apenas o próprio percentual e a confirmação para assinar.</p>` : ""}<div id="trCorpo"></div>`;
     const desenhar = async () => {
       const fim = fimDoMes(mes), feitas = await concluidas(mes + "-01", fim), quem = master ? pes : pes.filter((p) => p.id === me.uid);
@@ -111,7 +112,7 @@ export function iniciarTime(c) {
           <td class="small">${s.falt.map((f) => `${esc(f.titulo)} (${f.vezes}x)`).join("; ") || "—"}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">Sem atividades previstas neste mês.</td></tr>`}</tbody></table></div>
         ${master ? `<h3>Avaliações (só gestão)</h3><table><thead><tr><th>Pessoa</th><th>Período</th><th>Data e hora</th><th>Situação</th><th></th></tr></thead><tbody>${avs.sort((a, b) => String(b.dataHora).localeCompare(String(a.dataHora))).map((a) => {
           const s = ass.find((x) => x.id === a.assinaturaId); return `<tr><td>${esc(a.pessoaNome)}</td><td>${esc(a.periodo)}</td><td>${esc(br(a.dataHora))} ${esc(String(a.dataHora).slice(11, 16))}</td>
-          <td>${esc(a.status)}${s ? ` · ${s.status === "Assinado" ? "assinada" : "aguardando assinatura"}` : ""}</td><td class="acoes-linha"><button class="btn small" data-v="${a.id}">${a.status === "Agendada" ? "Aplicar" : "Ver / editar"}</button><button class="btn small" data-ia="${a.id}">Copiar resumo p/ IA</button></td></tr>`; }).join("") || `<tr><td colspan="5" class="muted">Nenhuma avaliação planejada.</td></tr>`}</tbody></table>` : ""}
+          <td>${esc(a.status)}${s ? ` · ${s.status === "Assinado" ? "assinada" : "aguardando assinatura"}` : ""}</td><td class="acoes-linha"><button class="btn small" data-v="${a.id}">${a.status === "Agendada" ? "Aplicar" : "Ver / editar"}</button><button class="btn small" data-ia="${a.id}">Copiar resumo p/ IA</button><button class="btn small" data-pf="${a.id}">🖨 Ficha</button></td></tr>`; }).join("") || `<tr><td colspan="5" class="muted">Nenhuma avaliação planejada.</td></tr>`}</tbody></table>` : ""}
         ${!master && avs.length ? `<h3>Minhas avaliações</h3><table><thead><tr><th>Período</th><th>Conversa</th><th>Situação</th><th>Feedback</th></tr></thead><tbody>${avs.map((a) => `<tr><td>${esc(a.periodo)}</td><td>${esc(br(a.dataHora))}</td><td>${esc(a.status)}</td><td class="small">${esc(a.feedback || "—")}</td></tr>`).join("")}</tbody></table>` : ""}
         <h3>${master ? "Confirmações e assinaturas" : "Minhas confirmações de avaliação"}</h3><table><thead><tr><th>Pessoa</th><th>Período</th><th>Conversa</th><th>Assinatura</th><th></th></tr></thead><tbody>${ass.map(assHtml).join("") || `<tr><td colspan="5" class="muted">Nada por aqui ainda.</td></tr>`}</tbody></table>`;
     };
@@ -121,19 +122,37 @@ export function iniciarTime(c) {
       <label>Período avaliado<input type="month" name="periodo" value="${mes}" required></label><label>Data e hora da conversa<input type="datetime-local" name="dataHora" required></label>
       <p class="small muted">O sistema monta o plano com o percentual de atividades cumpridas e as não cumpridas no período, e os critérios de avaliação.</p>`, async (f) => {
       const p = pes.find((x) => x.id === f.pessoaId), plano = stats(ats, await concluidas(f.periodo + "-01", fimDoMes(f.periodo)), p.id, f.periodo + "-01", fimDoMes(f.periodo));
-      await addDoc(collection(db, "timeAvaliacoes"), { pessoaId: p.id, pessoaNome: p.nome, periodo: f.periodo, dataHora: f.dataHora, status: "Agendada", plano: { pct: plano.pct, feito: plano.feito, plan: plano.plan, falt: plano.falt }, criterios: CRITERIOS.map((n) => ({ nome: n, nota: 0 })), pontos: "", combinados: "", feedback: "", criadoPor: me.nome, criadoEm: serverTimestamp() }); });
-    const abrirAv = (a) => abrirModal(`Avaliação – ${a.pessoaNome} (${a.periodo})`, `<p class="small">Conversa marcada para <b>${esc(br(a.dataHora))} ${esc(String(a.dataHora).slice(11, 16))}</b>. Atividades cumpridas no período: <b>${a.plano?.pct ?? 0}%</b> (${a.plano?.feito ?? 0} de ${a.plano?.plan ?? 0}).</p>
+      await addDoc(collection(db, "timeAvaliacoes"), { pessoaId: p.id, pessoaNome: p.nome, periodo: f.periodo, dataHora: f.dataHora, status: "Agendada", plano: { pct: plano.pct, feito: plano.feito, plan: plano.plan, falt: plano.falt }, ficha: p.cargo || "auxiliar", criterios: fichaDoCargo(p.cargo || "auxiliar").map((k) => ({ nome: k.nome, grupo: k.grupo, nota: "" })), pontos: "", combinados: "", feedback: "", criadoPor: me.nome, criadoEm: serverTimestamp() }); });
+    const abrirAv = (a) => abrirModal(`Avaliação – ${a.pessoaNome} (${a.periodo})${a.ficha ? " · ficha " + (NOME_FICHA[a.ficha] || "") : ""}`, `<p class="small">Conversa marcada para <b>${esc(br(a.dataHora))} ${esc(String(a.dataHora).slice(11, 16))}</b>. Atividades cumpridas no período: <b>${a.plano?.pct ?? 0}%</b> (${a.plano?.feito ?? 0} de ${a.plano?.plan ?? 0}).</p>
       ${(a.plano?.falt || []).length ? `<p class="small"><b>Não cumpridas:</b> ${a.plano.falt.map((f) => `${esc(f.titulo)} (${f.vezes}x)`).join("; ")}</p>` : ""}
-      <div class="duas">${a.criterios.map((k, i) => `<label>${esc(k.nome)} (1 a 5)<select name="n${i}"><option value="0">—</option>${[1, 2, 3, 4, 5].map((n) => `<option ${k.nota === n ? "selected" : ""}>${n}</option>`).join("")}</select></label>`).join("")}</div>
-      <label>Pontos a melhorar<textarea name="pontos" rows="3">${esc(a.pontos || "")}</textarea></label><label>Combinados<textarea name="combinados" rows="2">${esc(a.combinados || "")}</textarea></label><label>Feedback<textarea name="feedback" rows="3">${esc(a.feedback || "")}</textarea></label>`, async (f) => {
-      const d = { criterios: a.criterios.map((k, i) => ({ nome: k.nome, nota: Number(f["n" + i]) || 0 })), pontos: f.pontos, combinados: f.combinados, feedback: f.feedback };
+      ${a.ficha ? `<p class="muted small">${LEGENDA.map(([l, n, d]) => `<b>${l}</b> ${n}`).join(" · ")}</p>${[...new Set(a.criterios.map((k) => k.grupo))].map((g) => `<h4 style="margin:10px 0 2px">${esc(g)}</h4><div class="duas">${a.criterios.map((k, i) => [k, i]).filter(([k]) => k.grupo === g).map(([k, i]) => `<label>${esc(k.nome)}<select name="n${i}"><option value="">—</option>${["A", "B", "C", "D"].map((n) => `<option ${k.nota === n ? "selected" : ""}>${n}</option>`).join("")}</select></label>`).join("")}</div>`).join("")}`
+      : `<div class="duas">${a.criterios.map((k, i) => `<label>${esc(k.nome)} (1 a 5)<select name="n${i}"><option value="0">—</option>${[1, 2, 3, 4, 5].map((n) => `<option ${k.nota === n ? "selected" : ""}>${n}</option>`).join("")}</select></label>`).join("")}</div>`}
+      <label>Pontos a melhorar<textarea name="pontos" rows="3">${esc(a.pontos || "")}</textarea></label><label>Curso de especialização (técnico ou comportamental) melhoraria o desempenho? Justifique<textarea name="curso" rows="2">${esc(a.curso || "")}</textarea></label><label>Combinados<textarea name="combinados" rows="2">${esc(a.combinados || "")}</textarea></label><label>Considerações finais do avaliador<textarea name="feedback" rows="3">${esc(a.feedback || "")}</textarea></label>`, async (f) => {
+      const criterios = a.criterios.map((k, i) => ({ nome: k.nome, grupo: k.grupo, nota: a.ficha ? f["n" + i] || "" : Number(f["n" + i]) || 0 }));
+      const d = { criterios, pontos: f.pontos, curso: f.curso, combinados: f.combinados, feedback: f.feedback, ...(a.ficha ? { pct: pctDe(criterios), faixa: faixaDe(pctDe(criterios)).nome } : {}) };
       if (a.assinaturaId) return updateDoc(doc(db, "timeAvaliacoes", a.id), d);
       const s = await addDoc(collection(db, "timeAssinaturas"), { avaliacaoId: a.id, pessoaId: a.pessoaId, pessoaNome: a.pessoaNome, periodo: a.periodo, dataConversa: a.dataHora, conduzidaPor: me.nome, status: "Aguardando", criadoEm: serverTimestamp() });
-      await updateDoc(doc(db, "timeAvaliacoes", a.id), { ...d, status: "Aplicada", aplicadaEm: serverTimestamp(), assinaturaId: s.id }); toast("Avaliação aplicada. A pessoa já pode assinar a confirmação."); }, "Salvar / aplicar");
+      await updateDoc(doc(db, "timeAvaliacoes", a.id), { ...d, status: "Aplicada", aplicadaEm: serverTimestamp(), assinaturaId: s.id }); toast("Avaliação aplicada" + (a.ficha ? ` — resultado ${d.pct}% (${d.faixa}).` : ".") + " A pessoa já pode assinar a confirmação."); }, "Salvar / aplicar");
+    const imprimirFicha = (a, cargo) => {
+      const itens = a ? a.criterios : fichaDoCargo(cargo), pct = a ? pctDe(itens) : null, fx = pct != null ? faixaDe(pct) : null, mk = (k, l) => (k.nota === l ? "X" : "");
+      const tabela = (g) => `<table class="fa"><tr><th class="g">${esc(g.toUpperCase())}</th>${["A", "B", "C", "D"].map((l) => `<th class="l">${l}</th>`).join("")}</tr>${itens.filter((k) => k.grupo === g).map((k) => `<tr><td><b>${esc(k.nome)}</b><br><span>${esc(k.desc || fichaDoCargo(cargo).find((x) => x.nome === k.nome)?.desc || "")}</span></td>${["A", "B", "C", "D"].map((l) => `<td class="l">${mk(k, l)}</td>`).join("")}</tr>`).join("")}</table>`;
+      const linhas = (n) => Array.from({ length: n }, () => `<div class="ln"></div>`).join("");
+      docImpressao(`<div class="cab"><b>FICHA DE AVALIAÇÃO DE DESEMPENHO — ${esc((NOME_FICHA[cargo] || "").toUpperCase())}</b><br><small>${esc(CLINICA_NOME)}</small></div>
+        <table class="fa"><tr><td><b>NOME:</b> ${esc(a?.pessoaNome || "")}</td><td><b>CARGO:</b> ${esc(NOME_FICHA[cargo] || "")}</td></tr><tr><td><b>DATA ADMISSÃO:</b> ____/____/______</td><td><b>PERÍODO AVALIADO:</b> ${esc(a?.periodo || "")}</td></tr><tr><td><b>GESTOR:</b> ${esc(a?.conduzidaPor || "")}</td><td><b>DATA DA AVALIAÇÃO:</b> ${a ? esc(br(a.dataHora)) : "____/____/______"}</td></tr></table>
+        <p class="peq"><b>Preenchimento:</b> responda com cuidado; avalie cada item separadamente; marque X na graduação que melhor reflete a realidade. ${LEGENDA.map(([l, n, d]) => `<b>${l} – ${n}:</b> ${d}.`).join(" ")}</p>
+        ${[...new Set(itens.map((k) => k.grupo))].map(tabela).join("")}
+        <table class="fa"><tr><td>ASSINATURA DO AVALIADO: ____________________________</td><td>DATA: ____/____/______</td></tr><tr><td>ASSINATURA DO AVALIADOR: ____________________________</td><td>DATA: ____/____/______</td></tr></table>
+        <div class="quebra"></div><h2>AVALIAÇÃO DE DESEMPENHO — AVALIADO</h2>${PERGUNTAS_AVALIADO.map((q, i) => `<p><b>${"ABCDE"[i]})</b> ${esc(q)} ( ) SIM ( ) NÃO. Justifique:</p>${linhas(2)}`).join("")}<p><b>F)</b> Descreva aqui algum assunto que gostaria que fosse abordado:</p>${linhas(2)}<p>ASSINATURA DO AVALIADO: ____________________________ DATA: ____/____/______</p>
+        <h2>AVALIAÇÃO DE DESEMPENHO — RESULTADO</h2>${pct != null ? `<p><b>Pontuação: ${pct}% — ${esc(fx.nome)}</b><br>${esc(fx.texto)}</p>` : ""}<table class="fa">${FAIXAS.map((f) => `<tr><td><b>${esc(f.nome)}</b><br><span>${esc(f.texto)}</span></td></tr>`).join("")}</table>
+        <h2>AVALIAÇÃO DE DESEMPENHO — AVALIADOR</h2><p><b>A)</b> Pontos que devem ser melhorados:</p>${a?.pontos ? `<p>${esc(a.pontos)}</p>` : linhas(3)}<p><b>B)</b> O desempenho seria melhor com algum curso de especialização, comportamental ou técnico? ( ) SIM ( ) NÃO. Justifique:</p>${a?.curso ? `<p>${esc(a.curso)}</p>` : linhas(2)}<p><b>C)</b> Considerações finais do avaliador:</p>${a?.feedback ? `<p>${esc(a.feedback)}</p>` : linhas(3)}<p>ASSINATURA DO AVALIADOR: ____________________________ DATA: ____/____/______</p>`, "a4", "Ficha de avaliação " + (a?.pessoaNome || NOME_FICHA[cargo]),
+        `.fa{margin:8px 0;font-size:11px}.fa td,.fa th{border:1px solid #444;padding:4px 6px}.fa th.g{background:#0d3c78;color:#fff;text-align:left}.fa .l{width:26px;text-align:center}.fa span{color:#555;font-size:10px}.peq{font-size:10.5px}.ln{border-bottom:1px solid #777;height:20px}.quebra{page-break-before:always}h2{background:#e8f0fb;padding:5px;font-size:13px;text-align:left}`); };
     $("#trPlano") && ($("#trPlano").onclick = planejar);
+    v.querySelectorAll("[data-fb]").forEach((b) => (b.onclick = () => imprimirFicha(null, b.dataset.fb)));
     $("#trCorpo").onclick = async (e) => {
       const b = e.target.closest("button"); if (!b) return;
       if (b.dataset.v) return abrirAv(avs.find((x) => x.id === b.dataset.v));
+      if (b.dataset.pf) { const a = avs.find((x) => x.id === b.dataset.pf); return imprimirFicha(a.ficha ? a : null, a.ficha || pes.find((p) => p.id === a.pessoaId)?.cargo || "auxiliar"); }
+      if (b.dataset.fb) return imprimirFicha(null, b.dataset.fb);
       if (b.dataset.ia) { await navigator.clipboard.writeText(resumoIA(avs.find((x) => x.id === b.dataset.ia))); return toast("Resumo (sem nomes) copiado. Cole no Gemini e revise o texto antes de usar."); }
       if (b.dataset.a) return modalAssinar(ass.find((x) => x.id === b.dataset.a));
       if (b.dataset.i) return imprimirConfirmacao(ass.find((x) => x.id === b.dataset.i));
@@ -194,5 +213,23 @@ export function iniciarTime(c) {
       cfg = { inicioTeste: f.inicioTeste }; await setDoc(doc(db, "timeConfig", "geral"), cfg); }));
     desenhar();
   }
-  return { "time-agenda": telaAgenda, "time-relatorios": telaRelatorios, "time-presenca": telaPresenca };
+  function telaCargos(v) {
+    let cur = "auxiliar";
+    const html = (d) => `<div class="cab"><b>Descrição de Cargo – ${esc(d.nome)}</b><br><small>${esc(CLINICA_NOME)} · Rubrica ____________</small></div>
+      <h3>1. Identificação do cargo</h3><table class="fa">${[["Empregador", CLINICA_NOME], ["Cargo", d.nome], ["CBO", d.cbo], ["Setor", d.setor], ["Superior imediato", d.superior], ["Regime de contratação", d.regime], ["Jornada e ponto", d.jornada], ["Remuneração", d.remuneracao]].map(([k, x]) => `<tr><td style="width:30%"><b>${k}</b></td><td>${esc(x)}</td></tr>`).join("")}</table>
+      <h3>2. Missão do cargo</h3><p>${esc(d.missao)}</p>
+      <h3>3. Atribuições e responsabilidades</h3><p class="peq">O empregado se obriga a todo e qualquer serviço compatível com sua condição pessoal e com as atribuições abaixo (art. 456, parágrafo único, da CLT). Os procedimentos detalhados constam do Manual de Rotinas da clínica, que integra esta descrição.</p>
+      ${d.atribuicoes.map((s) => `<h4>${esc(s.titulo)}</h4><ul>${s.itens.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`).join("")}
+      <h3>4. Requisitos do cargo</h3><table class="fa">${d.requisitos.map(([k, x]) => `<tr><td style="width:30%"><b>${esc(k)}</b></td><td>${esc(x)}</td></tr>`).join("")}</table>
+      <h3>5. Condições de trabalho, riscos e EPIs</h3><p>${esc(d.riscos)}</p>
+      <h3>6. Limites de atuação e disposições gerais</h3><ul>${d.limites.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>
+      <h3>Ciência e concordância</h3><p>Declaro ter recebido, lido e compreendido esta descrição de cargo e o Manual de Rotinas.</p><p>Fortaleza/CE, ____ de ______________ de ______.</p>
+      <table class="fa"><tr><td>Empregado(a)<br>Nome: __________________<br>CPF: __________________<br>Assinatura: __________________</td><td>Empregador — ${esc(CLINICA_NOME)}<br>Responsável: __________________<br><br>Assinatura: __________________</td></tr></table>`;
+    const des = () => { v.querySelector("#cgDoc").innerHTML = html(DESCRICOES[cur]); };
+    v.innerHTML = `<div class="barra"><h2>Descrições de cargo</h2><select id="cgSel">${Object.entries(DESCRICOES).map(([id, d]) => `<option value="${id}">${esc(d.nome)}</option>`).join("")}</select><button class="btn primary" id="cgPrint">🖨 Imprimir / salvar PDF</button></div>
+      <p class="muted small">Textos em <code>cargos-rh.js</code>. Itens como CBO, jornada e insalubridade devem ser conferidos com o contador ou advogado trabalhista antes de assinar.</p><div class="card" id="cgDoc" style="font-size:13px"></div>`;
+    $("#cgSel").onchange = (e) => { cur = e.target.value; des(); }; $("#cgPrint").onclick = () => docImpressao(html(DESCRICOES[cur]), "a4", "Descrição de cargo " + DESCRICOES[cur].nome, `.fa{width:100%;border-collapse:collapse;margin:6px 0;font-size:11.5px}.fa td{border:1px solid #666;padding:4px 6px}h3{background:#e8f0fb;padding:4px 6px;font-size:13px;margin:12px 0 4px}h4{margin:8px 0 2px;font-size:12px}ul{margin:2px 0 4px 18px;padding:0}li{margin:1px 0}.peq{font-size:11px}`);
+    des();
+  }
+  return { "time-cargos": telaCargos, "time-agenda": telaAgenda, "time-relatorios": telaRelatorios, "time-presenca": telaPresenca };
 }
