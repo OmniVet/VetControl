@@ -213,6 +213,78 @@ export function iniciarTime(c) {
       cfg = { inicioTeste: f.inicioTeste }; await setDoc(doc(db, "timeConfig", "geral"), cfg); }));
     desenhar();
   }
+  /* ===== DOCUMENTAÇÃO (check de documentos assinados por colaborador) ===== */
+  const SUGESTOES_DOCS = [
+    { nome: "Termo de confidencialidade e LGPD", aplica: "todos", descricao: "Sigilo de dados de tutores, pacientes e da clínica (Lei nº 13.709/2018)." },
+    { nome: "Autorização de uso de imagem", aplica: "todos", descricao: "Fotos e vídeos de pacientes e da equipe para uso da clínica." },
+    { nome: "Contrato de trabalho (CLT)", aplica: "clt", descricao: "Contrato assinado; contrato de experiência quando houver." },
+    { nome: "Descrição de cargo e Manual de Rotinas (ciência)", aplica: "clt", descricao: "Impressa em Nosso time → Descrição de cargo, com o nome do colaborador." },
+    { nome: "Termo de recebimento de EPIs", aplica: "clt", descricao: "Luvas, máscara, avental, óculos e calçado fechado." },
+    { nome: "ASO admissional", aplica: "clt", descricao: "Atestado de saúde ocupacional do exame admissional." },
+    { nome: "Contrato de prestação de serviços (PJ)", aplica: "pj", descricao: "Contrato do médico(a) veterinário(a) prestador(a) de serviços." },
+    { nome: "Cartão CNPJ e dados para pagamento", aplica: "pj", descricao: "" },
+    { nome: "Carteira do CRMV", aplica: "pj", descricao: "Registro regular no CRMV-CE." }
+  ];
+  const vinculoDe = (p) => (cltDe(p) ? "clt" : "pj");
+  const APLICA = { todos: "Todos", clt: "CLT", pj: "PJ (médicos)" };
+  async function telaDocs(v) {
+    const [pes, modelos, ass] = await Promise.all([pessoas(), lista("timeDocModelos"), lista("timeDocAssin")]);
+    modelos.sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+    const mapa = new Map(ass.map((a) => [a.pessoaId + "_" + a.modeloId, a]));
+    const doPessoa = (p) => modelos.filter((m) => m.ativo !== false && (m.aplica === "todos" || m.aplica === vinculoDe(p)));
+    const resumo = (p) => { const l = doPessoa(p); return { tot: l.length, ok: l.filter((m) => mapa.has(p.id + "_" + m.id)).length }; };
+    let sel = pes[0]?.id;
+    v.innerHTML = `<div class="barra"><h2>Documentação do time</h2><select id="dcP">${pes.map((p) => { const r = resumo(p); return `<option value="${p.id}">${esc(p.nome)} — ${r.ok}/${r.tot}</option>`; }).join("")}</select>
+      <button class="btn small" id="dcNovo">+ Novo documento</button><button class="btn small" id="dcSug">Carregar documentos sugeridos</button></div>
+      <p class="muted small">Marque o quadradinho quando a pessoa assinar o documento. Cada tipo de vínculo (CLT ou PJ) tem a sua lista. As sugestões são um ponto de partida: confirme com o contador/advogado.</p>
+      <div id="dcLista"></div><h3>Modelos de documento</h3><div class="tabela-wrap"><table><thead><tr><th>Documento</th><th>Aplica a</th><th>Descrição</th><th></th></tr></thead><tbody>${modelos.map((m) => `<tr><td><b>${esc(m.nome)}</b>${m.link ? ` <a href="${esc(m.link)}" target="_blank" rel="noopener">abrir</a>` : ""}</td><td>${APLICA[m.aplica] || ""}</td><td class="small">${esc(m.descricao || "")}</td><td class="acoes-linha"><button class="btn small" data-e="${m.id}">Editar</button><button class="btn small danger" data-x="${m.id}">Excluir</button></td></tr>`).join("") || `<tr><td colspan="4" class="muted">Nenhum documento ainda. Use "Carregar documentos sugeridos".</td></tr>`}</tbody></table></div>`;
+    const des = () => { const p = pes.find((x) => x.id === sel); if (!p) { $("#dcLista").innerHTML = ""; return; } const l = doPessoa(p), r = resumo(p);
+      $("#dcLista").innerHTML = `<div class="card"><b>${esc(p.nome)}</b> <span class="tag neutro">${APLICA[vinculoDe(p)]}</span> — ${r.ok} de ${r.tot} assinados ${barra(r.tot ? Math.round((r.ok * 100) / r.tot) : 0)}
+        ${l.map((m) => { const a = mapa.get(p.id + "_" + m.id); return `<label style="display:flex;gap:8px;align-items:center;padding:6px 0;border-top:1px solid #e3e9f3"><input type="checkbox" data-m="${m.id}" ${a ? "checked" : ""}> <span style="flex:1"><b>${esc(m.nome)}</b>${m.link ? ` <a href="${esc(m.link)}" target="_blank" rel="noopener">abrir</a>` : ""}<br><span class="muted small">${esc(m.descricao || "")}</span></span>${a ? `<span class="small">✔ ${esc(br(a.data))} · ${esc(a.marcadoPor || "")}</span>` : `<span class="small muted">pendente</span>`}</label>`; }).join("") || `<p class="muted">Sem documentos para este vínculo.</p>`}</div>`; };
+    des(); $("#dcP").onchange = (e) => { sel = e.target.value; des(); };
+    $("#dcLista").onchange = async (e) => { const c = e.target.closest("[data-m]"); if (!c) return; const id = sel + "_" + c.dataset.m;
+      if (c.checked) { const a = { pessoaId: sel, modeloId: c.dataset.m, data: hoje(), marcadoPor: eu().nome, marcadoEm: serverTimestamp() }; await setDoc(doc(db, "timeDocAssin", id), a); mapa.set(id, { ...a }); }
+      else { if (!confirm("Desmarcar este documento (a pessoa ainda não assinou)?")) { c.checked = true; return; } await deleteDoc(doc(db, "timeDocAssin", id)); mapa.delete(id); }
+      const o = $("#dcP").querySelector(`option[value="${sel}"]`), p = pes.find((x) => x.id === sel), r = resumo(p); o.textContent = `${p.nome} — ${r.ok}/${r.tot}`; des(); };
+    const form = (m) => abrirModal(m ? "Editar documento" : "Novo documento", `<label>Nome do documento<input name="nome" required value="${esc(m?.nome || "")}"></label><label>Aplica a<select name="aplica">${Object.entries(APLICA).map(([k, n]) => `<option value="${k}" ${m?.aplica === k ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+      <label>Descrição / observações<textarea name="descricao" rows="2">${esc(m?.descricao || "")}</textarea></label><label>Link do documento (Drive, opcional)<input name="link" value="${esc(m?.link || "")}"></label>`,
+      async (f) => { const d = { nome: f.nome.trim(), aplica: f.aplica, descricao: f.descricao, link: f.link, ativo: true }; if (m) await updateDoc(doc(db, "timeDocModelos", m.id), d); else await addDoc(collection(db, "timeDocModelos"), { ...d, criadoEm: serverTimestamp() }); toast("Documento salvo."); telaDocs(v); }, "Salvar");
+    $("#dcNovo").onclick = () => form(null);
+    $("#dcSug").onclick = async () => { const tem = new Set(modelos.map((m) => m.nome)); const novos = SUGESTOES_DOCS.filter((s) => !tem.has(s.nome)); if (!novos.length) return toast("As sugestões já estão carregadas."); for (const s of novos) await addDoc(collection(db, "timeDocModelos"), { ...s, ativo: true, criadoEm: serverTimestamp() }); toast(novos.length + " documentos adicionados."); telaDocs(v); };
+    v.querySelectorAll("[data-e]").forEach((b) => (b.onclick = () => form(modelos.find((m) => m.id === b.dataset.e))));
+    v.querySelectorAll("[data-x]").forEach((b) => (b.onclick = async () => { if (confirm("Excluir este documento da lista? As marcações antigas somem da tela.")) { await deleteDoc(doc(db, "timeDocModelos", b.dataset.x)); telaDocs(v); } }));
+  }
+
+  /* ===== TREINAMENTOS (check-in de quem participou) ===== */
+  const SUGESTOES_TREINOS = ["Atendimento ao cliente", "Importância da documentação na clínica veterinária", "Biossegurança, limpeza e esterilização", "Contenção e manejo de pacientes", "Atendimento telefônico, agenda e cobranças", "Primeiros socorros e emergências"];
+  async function telaTreinos(v) {
+    const [pes, treinos] = await Promise.all([pessoas(), lista("timeTreinos")]);
+    let ano = hoje().slice(0, 4), pessoaF = "";
+    const anos = () => [...new Set([hoje().slice(0, 4), ...treinos.map((t) => String(t.data || "").slice(0, 4)).filter(Boolean)])].sort().reverse();
+    v.innerHTML = `<div class="barra"><h2>Treinamentos</h2><select id="trA">${anos().map((a) => `<option>${a}</option>`).join("")}</select><select id="trP"><option value="">Todas as pessoas</option>${pes.map((p) => `<option value="${p.id}">${esc(p.nome)}</option>`).join("")}</select>
+      <button class="btn primary" id="trNovo">+ Novo treinamento</button><button class="btn small" id="trSug">Carregar sugestões do ano</button></div>
+      <p class="muted small">Faça o check-in de quem participou de cada treinamento. Ao escolher uma pessoa, a lista mostra o que ela já fez.</p><div class="tabela-wrap"><table><thead><tr><th>Data</th><th>Treinamento</th><th>Instrutor / carga</th><th>Participantes</th><th></th></tr></thead><tbody id="trTb"></tbody></table></div>`;
+    const des = () => { const l = treinos.filter((t) => (!t.data || String(t.data).startsWith(ano))).sort((a, b) => String(a.data || "9").localeCompare(String(b.data || "9")));
+      $("#trTb").innerHTML = l.map((t) => { const pt = t.participantes || {}, n = Object.keys(pt).length, fez = pessoaF ? !!pt[pessoaF] : null;
+        return `<tr><td>${t.data ? esc(br(t.data)) : "a definir"}</td><td><b>${esc(t.nome)}</b>${t.obs ? `<div class="muted small">${esc(t.obs)}</div>` : ""}</td><td class="small">${esc(t.instrutor || "—")}${t.cargaH ? " · " + esc(t.cargaH) + " h" : ""}</td>
+        <td>${pessoaF ? (fez ? `<span class="tag ok">✔ participou</span>` : `<span class="tag alerta">não participou</span>`) : `${n} de ${pes.length}`}</td><td class="acoes-linha"><button class="btn small primary" data-c="${t.id}">Check-in</button><button class="btn small" data-e="${t.id}">Editar</button><button class="btn small danger" data-x="${t.id}">Excluir</button></td></tr>`; }).join("") || `<tr><td colspan="5" class="muted">Nenhum treinamento neste ano.</td></tr>`; };
+    des(); $("#trA").onchange = (e) => { ano = e.target.value; des(); }; $("#trP").onchange = (e) => { pessoaF = e.target.value; des(); };
+    const form = (t) => abrirModal(t ? "Editar treinamento" : "Novo treinamento", `<label>Nome do treinamento<input name="nome" required value="${esc(t?.nome || "")}"></label><div class="duas"><label>Data<input type="date" name="data" value="${esc(t?.data || "")}"></label><label>Carga horária (h)<input name="cargaH" value="${esc(t?.cargaH || "")}"></label></div>
+      <label>Instrutor / empresa<input name="instrutor" value="${esc(t?.instrutor || "")}"></label><label>Observações<textarea name="obs" rows="2">${esc(t?.obs || "")}</textarea></label>`,
+      async (f) => { const d = { nome: f.nome.trim(), data: f.data, cargaH: f.cargaH, instrutor: f.instrutor, obs: f.obs }; if (t) await updateDoc(doc(db, "timeTreinos", t.id), d); else await addDoc(collection(db, "timeTreinos"), { ...d, participantes: {}, criadoEm: serverTimestamp() }); toast("Treinamento salvo."); telaTreinos(v); }, "Salvar");
+    $("#trNovo").onclick = () => form(null);
+    $("#trSug").onclick = async () => { const tem = new Set(treinos.filter((t) => !t.data || String(t.data).startsWith(ano)).map((t) => t.nome)); const novos = SUGESTOES_TREINOS.filter((n) => !tem.has(n)); if (!novos.length) return toast("Já estão na lista."); for (const n of novos) await addDoc(collection(db, "timeTreinos"), { nome: n, data: "", cargaH: "", instrutor: "", obs: "Ano " + ano, participantes: {}, criadoEm: serverTimestamp() }); toast(novos.length + " treinamentos adicionados (sem data)."); telaTreinos(v); };
+    $("#trTb").onclick = async (e) => { const b = e.target.closest("button"); if (!b) return; const t = treinos.find((x) => x.id === (b.dataset.c || b.dataset.e || b.dataset.x)); if (!t) return;
+      if (b.dataset.e) return form(t);
+      if (b.dataset.x) { if (confirm("Excluir este treinamento e os check-ins?")) { await deleteDoc(doc(db, "timeTreinos", t.id)); telaTreinos(v); } return; }
+      const pt = t.participantes || {};
+      abrirModal(`Check-in — ${t.nome}`, `<p class="muted small">Marque quem participou. Data do treinamento: ${t.data ? esc(br(t.data)) : "a definir"}.</p><div class="duas"><button type="button" class="btn small" id="ckTodos">Marcar todos</button><button type="button" class="btn small" id="ckNenhum">Limpar</button></div>
+        ${pes.map((p) => `<label style="display:flex;gap:8px;align-items:center;padding:4px 0"><input type="checkbox" data-p="${p.id}" ${pt[p.id] ? "checked" : ""}> ${esc(p.nome)} <span class="muted small">${esc(pt[p.id] ? "✔ " + br(pt[p.id].em) : "")}</span></label>`).join("")}`,
+        async () => { const novo = {}; $("#modalCorpo").querySelectorAll("[data-p]").forEach((c) => { if (c.checked) { const p = pes.find((x) => x.id === c.dataset.p); novo[p.id] = pt[p.id] || { nome: p.nome, em: t.data || hoje(), por: eu().nome }; } });
+          await updateDoc(doc(db, "timeTreinos", t.id), { participantes: novo }); toast("Check-in salvo."); telaTreinos(v); }, "Salvar check-in");
+      $("#ckTodos").onclick = () => $("#modalCorpo").querySelectorAll("[data-p]").forEach((c) => (c.checked = true)); $("#ckNenhum").onclick = () => $("#modalCorpo").querySelectorAll("[data-p]").forEach((c) => (c.checked = false)); };
+  }
+
   function telaCargos(v) {
     let cur = "auxiliar";
     const html = (d, nome) => htmlDescricao(d, CLINICA_NOME, nome);
@@ -222,5 +294,5 @@ export function iniciarTime(c) {
     $("#cgSel").onchange = (e) => { cur = e.target.value; des(); }; $("#cgNome").oninput = des; $("#cgPrint").onclick = () => docImpressao(html(DESCRICOES[cur], $("#cgNome").value.trim()), "a4", "Descrição de cargo " + DESCRICOES[cur].nome + ($("#cgNome").value ? " - " + $("#cgNome").value : ""), CSS_DESCRICAO);
     des();
   }
-  return { "time-cargos": telaCargos, "time-agenda": telaAgenda, "time-relatorios": telaRelatorios, "time-presenca": telaPresenca };
+  return { "time-docs": telaDocs, "time-treino": telaTreinos, "time-cargos": telaCargos, "time-agenda": telaAgenda, "time-relatorios": telaRelatorios, "time-presenca": telaPresenca };
 }

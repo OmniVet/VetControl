@@ -141,3 +141,6 @@ export const EXAMES_IMAGEM = ["Raio-X", "Ultrassom", "Eletrocardiograma", "Ecoca
 
 // E-mail do atendimento VetPlus: o botão "Enviar por e-mail" do laudo abre o e-mail já endereçado para ele. Preencha aqui.
 export const EMAIL_ATENDIMENTO = "atendimentovetplus@gmail.com";
+
+// Laboratórios aceitos para exames de PLANO DE SAÚDE (lançados um por um). Vazio = qualquer laboratório. Ex.: ["VETEX", "VETER"]
+export const LABS_PLANO = [];

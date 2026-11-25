@@ -208,6 +208,10 @@ service cloud.firestore {
       allow update: if master();
       allow delete: if false;
     }
+    // Documentação e treinamentos do time: só Master e Gerente
+    match /timeDocModelos/{id} { allow read, write: if master() || gerente(); }
+    match /timeDocAssin/{id} { allow read, write: if master() || gerente(); }
+    match /timeTreinos/{id} { allow read, write: if master() || gerente(); }
     match /timeConfig/{id} {
       allow read: if ativo();
       allow write: if master();
