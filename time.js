@@ -1,6 +1,6 @@
 // "Nosso time": agenda de atividades, relatórios/avaliações (só master) e presença (ponto).
 // Recebe do app.js as ferramentas prontas (banco, janelas, impressão…) para não repetir código.
-import { NOTAS, LEGENDA, FAIXAS, faixaDe, pctDe, fichaDoCargo, NOME_FICHA, PERGUNTAS_AVALIADO, DESCRICOES } from "./cargos-rh.js";
+import { htmlDescricao, CSS_DESCRICAO, NOTAS, LEGENDA, FAIXAS, faixaDe, pctDe, fichaDoCargo, NOME_FICHA, PERGUNTAS_AVALIADO, DESCRICOES } from "./cargos-rh.js";
 export function iniciarTime(c) {
   const { db, fb, $, esc, toast, abrirModal, opts, hoje, eu, isMaster, docImpressao, sha256, entrarComSenha, CRITERIOS, CLINICA_NOME, cltDe } = c;
   const { collection, doc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, serverTimestamp } = fb;
@@ -215,20 +215,11 @@ export function iniciarTime(c) {
   }
   function telaCargos(v) {
     let cur = "auxiliar";
-    const html = (d) => `<div class="cab"><b>Descrição de Cargo – ${esc(d.nome)}</b><br><small>${esc(CLINICA_NOME)} · Rubrica ____________</small></div>
-      <h3>1. Identificação do cargo</h3><table class="fa">${[["Empregador", CLINICA_NOME], ["Cargo", d.nome], ["CBO", d.cbo], ["Setor", d.setor], ["Superior imediato", d.superior], ["Regime de contratação", d.regime], ["Jornada e ponto", d.jornada], ["Remuneração", d.remuneracao]].map(([k, x]) => `<tr><td style="width:30%"><b>${k}</b></td><td>${esc(x)}</td></tr>`).join("")}</table>
-      <h3>2. Missão do cargo</h3><p>${esc(d.missao)}</p>
-      <h3>3. Atribuições e responsabilidades</h3><p class="peq">O empregado se obriga a todo e qualquer serviço compatível com sua condição pessoal e com as atribuições abaixo (art. 456, parágrafo único, da CLT). Os procedimentos detalhados constam do Manual de Rotinas da clínica, que integra esta descrição.</p>
-      ${d.atribuicoes.map((s) => `<h4>${esc(s.titulo)}</h4><ul>${s.itens.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`).join("")}
-      <h3>4. Requisitos do cargo</h3><table class="fa">${d.requisitos.map(([k, x]) => `<tr><td style="width:30%"><b>${esc(k)}</b></td><td>${esc(x)}</td></tr>`).join("")}</table>
-      <h3>5. Condições de trabalho, riscos e EPIs</h3><p>${esc(d.riscos)}</p>
-      <h3>6. Limites de atuação e disposições gerais</h3><ul>${d.limites.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>
-      <h3>Ciência e concordância</h3><p>Declaro ter recebido, lido e compreendido esta descrição de cargo e o Manual de Rotinas.</p><p>Fortaleza/CE, ____ de ______________ de ______.</p>
-      <table class="fa"><tr><td>Empregado(a)<br>Nome: __________________<br>CPF: __________________<br>Assinatura: __________________</td><td>Empregador — ${esc(CLINICA_NOME)}<br>Responsável: __________________<br><br>Assinatura: __________________</td></tr></table>`;
-    const des = () => { v.querySelector("#cgDoc").innerHTML = html(DESCRICOES[cur]); };
-    v.innerHTML = `<div class="barra"><h2>Descrições de cargo</h2><select id="cgSel">${Object.entries(DESCRICOES).map(([id, d]) => `<option value="${id}">${esc(d.nome)}</option>`).join("")}</select><button class="btn primary" id="cgPrint">🖨 Imprimir / salvar PDF</button></div>
+    const html = (d, nome) => htmlDescricao(d, CLINICA_NOME, nome);
+    const des = () => { v.querySelector("#cgDoc").innerHTML = html(DESCRICOES[cur], $("#cgNome").value.trim()); };
+    v.innerHTML = `<div class="barra"><h2>Descrições de cargo</h2><select id="cgSel">${Object.entries(DESCRICOES).map(([id, d]) => `<option value="${id}">${esc(d.nome)}</option>`).join("")}</select><input id="cgNome" placeholder="Nome do(a) empregado(a) ou candidato(a)" style="min-width:260px"><button class="btn primary" id="cgPrint">🖨 Imprimir / salvar PDF</button></div>
       <p class="muted small">Textos em <code>cargos-rh.js</code>. Itens como CBO, jornada e insalubridade devem ser conferidos com o contador ou advogado trabalhista antes de assinar.</p><div class="card" id="cgDoc" style="font-size:13px"></div>`;
-    $("#cgSel").onchange = (e) => { cur = e.target.value; des(); }; $("#cgPrint").onclick = () => docImpressao(html(DESCRICOES[cur]), "a4", "Descrição de cargo " + DESCRICOES[cur].nome, `.fa{width:100%;border-collapse:collapse;margin:6px 0;font-size:11.5px}.fa td{border:1px solid #666;padding:4px 6px}h3{background:#e8f0fb;padding:4px 6px;font-size:13px;margin:12px 0 4px}h4{margin:8px 0 2px;font-size:12px}ul{margin:2px 0 4px 18px;padding:0}li{margin:1px 0}.peq{font-size:11px}`);
+    $("#cgSel").onchange = (e) => { cur = e.target.value; des(); }; $("#cgNome").oninput = des; $("#cgPrint").onclick = () => docImpressao(html(DESCRICOES[cur], $("#cgNome").value.trim()), "a4", "Descrição de cargo " + DESCRICOES[cur].nome + ($("#cgNome").value ? " - " + $("#cgNome").value : ""), CSS_DESCRICAO);
     des();
   }
   return { "time-cargos": telaCargos, "time-agenda": telaAgenda, "time-relatorios": telaRelatorios, "time-presenca": telaPresenca };

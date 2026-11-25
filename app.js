@@ -191,16 +191,14 @@ const SETORES = [
   { id: "orcamentos", mod: "ambul", n: "8", titulo: "Orçamentos", icone: "💰", abas: [["orcamentos", "8.1 Histórico de orçamentos"], ["orcamento", "8.2 Novo orçamento"], ["servicos", "8.3 Banco de serviços"], ["pacotes", "Pacotes"]] },
   { id: "time-agenda", mod: "time", n: "", titulo: "Agenda de atividades do time", icone: "📋", abas: [["time-agenda", "Agenda de atividades"]] },
   { id: "time-relatorios", mod: "time", n: "", titulo: "Relatórios e histórico do time", icone: "📑", abas: [["time-relatorios", "Relatórios, avaliações e assinaturas"]] },
-  { id: "time-cargos", mod: "time", n: "", titulo: "Descrições de cargo", icone: "📄", abas: [["time-cargos", "Descrição de cargo por função"]] },
   { id: "time-presenca", mod: "time", n: "", titulo: "Presença do time", icone: "⏱", abas: [["time-presenca", "Registro e espelho de presença"]] },
-  { id: "entrevista", mod: "entrevista", n: "", titulo: "Entrevistas", icone: "🗣️", entrevista: true, abas: [["entrevista", "Entrevistas por tipo de vaga"]] },
+  { id: "entrevista", mod: "time", n: "", titulo: "Entrevista e descrição de cargo", icone: "🗣️", entrevista: true, abas: [["entrevista", "Entrevistas por tipo de vaga (ficha com o nome do candidato)"], ["time-cargos", "Descrição de cargo (imprimir com o nome)"]] },
 ];
 const MODULOS = [
   { id: "exames", titulo: "Módulo Exames", sub: "Exames, Laudos e Histórico de Exames", icone: "🧪" },
   { id: "estoque", titulo: "Módulo Estoque e Compras", sub: "Estoque, Inventário, Compras e Reposição por setor", icone: "📦" },
   { id: "ambul", titulo: "Módulo Ambulatorial e Recepção", sub: "Vacinação, Ambulatorial e Orçamentos", icone: "🩺" },
   { id: "time", titulo: "Módulo Nosso time", sub: "Agenda de atividades, relatórios/avaliações e presença", icone: "👥" },
-  { id: "entrevista", titulo: "Módulo Entrevista", sub: "Seleção de candidatos (só Master e Gerente)", icone: "🗣️" },
   { id: "geral", titulo: "Geral", sub: "Relatórios gerais e configurações", icone: "⚙️" }
 ];
 async function render() {

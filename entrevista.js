@@ -1,3 +1,4 @@
+import { DESCRICOES, htmlDescricao, CSS_DESCRICAO, CARGO_DA_VAGA } from "./cargos-rh.js";
 // Módulo "Entrevista": só Master e Gerente. Fichas de entrevista por tipo de vaga, com perguntas, comentários e sinais (+/−) para o balanço final.
 const GERAIS = [
   "Qual a sua experiência na área?",
@@ -52,10 +53,11 @@ export function iniciarEntrevista(c) {
       v.innerHTML = `<div class="barra"><button class="btn small" id="eVolta">◀ Tipos</button><h2 style="margin:0;flex:1">${k.icone} ${esc(k.nome)}</h2><button class="btn primary" id="eNova">+ Nova entrevista</button></div>
         <table><thead><tr><th>Data e hora</th><th>Candidato(a)</th><th>Telefone</th><th>Balanço</th><th>Parecer</th><th></th></tr></thead><tbody>${itens.map((x) => { const b = balanco(x.perguntas || []);
           return `<tr><td>${fdh(x.dataHora)}</td><td><b>${esc(x.nome)}</b></td><td>${esc(x.telefone || "")}</td><td>➕${b.mais} ➖${b.menos} <b>(${b.saldo > 0 ? "+" : ""}${b.saldo})</b></td><td>${esc(x.parecer || "—")}</td>
-          <td class="acoes-linha"><button class="btn small" data-v="${x.id}">Abrir</button><button class="btn small" data-i="${x.id}">🖨</button><button class="btn small danger" data-x="${x.id}">Excluir</button></td></tr>`; }).join("") || `<tr><td colspan="6" class="muted">Nenhuma entrevista ainda.</td></tr>`}</tbody></table>`;
+          <td class="acoes-linha"><button class="btn small" data-v="${x.id}">Abrir</button><button class="btn small" data-i="${x.id}">🖨 Ficha</button>${CARGO_DA_VAGA[k.id] ? `<button class="btn small" data-dc="${x.id}">🖨 Descrição de cargo</button>` : ""}<button class="btn small danger" data-x="${x.id}">Excluir</button></td></tr>`; }).join("") || `<tr><td colspan="6" class="muted">Nenhuma entrevista ainda.</td></tr>`}</tbody></table>`;
       $("#eVolta").onclick = inicio; $("#eNova").onclick = () => ficha(k, null);
       v.querySelectorAll("[data-v]").forEach((b) => (b.onclick = () => ficha(k, itens.find((x) => x.id === b.dataset.v))));
       v.querySelectorAll("[data-i]").forEach((b) => (b.onclick = () => imprimir(k, itens.find((x) => x.id === b.dataset.i))));
+      v.querySelectorAll("[data-dc]").forEach((b) => (b.onclick = () => { const x = itens.find((y) => y.id === b.dataset.dc); docImpressao(htmlDescricao(DESCRICOES[CARGO_DA_VAGA[k.id]], CLINICA_NOME, x.nome), "a4", "Descrição de cargo - " + x.nome, CSS_DESCRICAO); }));
       v.querySelectorAll("[data-x]").forEach((b) => (b.onclick = async () => { if (confirm("Excluir esta entrevista? Não dá para desfazer.")) { await deleteDoc(doc(db, "entrevistas", b.dataset.x)); toast("Entrevista excluída."); tela(v); } }));
     };
     function ficha(k, e) {
