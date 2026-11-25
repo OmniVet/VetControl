@@ -25,8 +25,8 @@ service cloud.firestore {
     // Quantidades do estoque só mudam pela estoquista/master (equipe lança pendências)
     match /produtos/{id} {
       allow read: if ativo();
-      allow create: if ativo() && (estoquista() || request.resource.data.lotesEstoque.size() == 0);
-      allow update: if estoquista();
+      allow create: if ativo();
+      allow update: if estoquista() || (ativo() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lotesEstoque','lotesLimbo']));
       allow delete: if master();
     }
 

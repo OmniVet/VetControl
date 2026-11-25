@@ -182,7 +182,7 @@ const SETORES = [
   { id: "historico", mod: "exames", n: "3", titulo: "Histórico de exames", icone: "📊", abas: [["planilha", "Exames laboratoriais"], ["prestadores", "Imagem e prestadores"], ["producao", "Produção por médico (semana)"], ["comparativo", "Comparativo com laboratório"], ["exportar-exames", "Exportar relatórios de exames"]] },
   { id: "compras", mod: "estoque", n: "4", titulo: "Solicitação de compras", icone: "🛒", abas: [["solicitacoes", "Pedir algo ao estoquista"]] },
   { id: "repasse", mod: "estoque", n: "", titulo: "Repasse ou venda", icone: "🤝", abas: [["repasses", "Empréstimos e vendas (pessoa ou empresa)"]] },
-  { id: "relatorios", mod: "geral", n: "5", titulo: "Relatórios gerais", icone: "📈", abas: [["relatorios", "Gerador de relatórios"]] },
+  { id: "relatorios", mod: "geral", n: "5", titulo: "Relatórios gerais", icone: "📈", gestao: true, abas: [["relatorios", "Gerador de relatórios"]] },
   { id: "estoque", mod: "estoque", n: "9", titulo: "Estoque", icone: "📦", abas: [["produtos", "9.1 Estoque geral"], ["limbo", "9.2 Limbo"], ["pedido", "9.3 Detalhes de pedido"], ["pendencias", "Pendências"], ["nfe", "Receber nota (XML)"], ["alertas", "Alertas"], ["equivalentes", "Medicamentos equivalentes"], ["cotacao", "Cotação"]] },
   { id: "reposicao", mod: "estoque", n: "", titulo: "Reposição por setor", icone: "🏥", abas: [["salas", "Salas, geladeiras e setores"], ["ficha", "Ficha de reposição"], ["semanal", "Relatório semanal de reposição"]] },
   { id: "inventario", mod: "estoque", n: "", titulo: "Inventário (patrimônio)", icone: "🪑", abas: [["inventario", "Equipamentos e móveis"]] },
@@ -215,7 +215,7 @@ async function render() {
   const v = $("#view"); v.innerHTML = `<p class="muted">Carregando…</p>`;
   const telas = { "nova-solicitacao": telaNovaSolicitacao, "busca-exames": telaBuscaExames, repasses: telaRepasses, "laudos-pendentes": telaLaudosPendentes, "laudos-liberados": telaLaudosLiberados, producao: telaProducao, "exportar-exames": (v) => telaRelatorios(v, "exames"),
     ...TIME, ...ENTREVISTA, equivalentes: telaEquivalentes, vencimentos: telaVencimentos, vacinas: telaVacinas, pets: telaPets, ambulatorio: telaAmbulatorio, orcamento: telaOrcamento, orcamentos: telaOrcamentos, servicos: telaServicos, pacotes: telaPacotes, prestadores: (v) => telaPlanilha(v, "prest"), comparativo: telaComparativo, modelos: telaModelos, limbo: telaLimbo, pendencias: telaPendencias, planilha: telaPlanilha, catalogo: telaCatalogo, painel: telaPainel, alertas: telaAlertas, profissionais: telaProfissionais, cotacao: telaCotacao, inventario: telaInventario, nfe: telaNfe, solicitacoes: telaSolicitacoes, exames: telaExames, produtos: telaProdutos, salas: telaSalas, ficha: telaFicha, semanal: telaSemanal, pedido: telaPedido, relatorios: telaRelatorios, fornecedores: telaFornecedores, usuarios: telaUsuarios };
-  try { await (telas[rota] || telaPainel)(v); } catch (e) { v.innerHTML = `<p class="erro">Erro: ${esc(e.message)}</p>`; console.error(e); }
+  try { if (rota === "relatorios" && !podeGerente()) { v.innerHTML = `<p>Relatórios: somente Master e Gerente.</p>`; return; } await (telas[rota] || telaPainel)(v); } catch (e) { v.innerHTML = `<p class="erro">Erro: ${esc(e.message)}</p>`; console.error(e); }
   window.scrollTo(0, 0);
 }
 
@@ -230,7 +230,7 @@ async function telaProdutos(v) {
     ${podeConfirmar() ? `<button class="btn" id="btnPlan">📥 Importar planilha</button>` : ""}${isMaster() ? `<button class="btn" id="btnImport">Colar lista</button>` : ""}
     ${podeConfirmar() ? `<button class="btn" id="btnFotos">🖼 Buscar fotos</button><button class="btn" id="btnSug" title="Aplica o mínimo e o ideal sugeridos nos produtos com histórico suficiente">📊 Aplicar sugestões</button>` : ""}
     <button class="btn primary" id="btnNovo">+ Novo produto</button></div>
-  <p class="muted small">Contagem do <b>estoque central</b> apenas. As salas/setores e o limbo têm contagens próprias nas outras abas.${podeConfirmar() ? "" : " Suas entradas e retiradas ficam <b>pendentes</b> até a estoquista confirmar."}</p>
+  <p class="muted small">Contagem do <b>estoque central</b> apenas. As salas/setores e o limbo têm contagens próprias nas outras abas.</p>
   <div class="tabela-wrap"><table><thead><tr><th></th><th>Produto</th><th>Distribuidora</th><th>Medida</th><th>Tipo</th><th>No estoque / validade</th><th>Ideal</th><th>Mín.</th><th>Sugestão (últimos ${DIAS_ANALISE} dias)</th><th>Status</th><th>Ações</th></tr></thead><tbody id="tb"></tbody></table></div>`;
   const desenhar = () => {
     const b = $("#busca").value.toLowerCase(), c = $("#fCat").value;
@@ -297,7 +297,7 @@ function modalProduto(p = {}) {
     if (p.id) { await updateDoc(doc(db, "produtos", p.id), dados); toast("Produto atualizado."); return; }
     const q = Number(f.qtdInicial || 0);
     if (q > 0 && !f.valInicial) throw new Error("Informe a validade da quantidade inicial.");
-    const direto = podeConfirmar() && q > 0;
+    const direto = q > 0;
     dados.lotesEstoque = direto ? [{ qtd: q, validade: f.valInicial }] : []; dados.lotesLimbo = []; dados.criadoEm = serverTimestamp();
     const ref = await addDoc(collection(db, "produtos"), dados);
     if (direto) await log({ tipo: "entrada", produtoId: ref.id, produtoNome: dados.nome, qtd: q, validade: f.valInicial, local: "estoque" });
@@ -318,10 +318,10 @@ function modalEntrada(p) {
     <label>Validade<input type="date" name="validade" required></label></div>
     <label>Nota fiscal / observação<input name="obs"></label>`,
   async (f) => {
-    if (!podeConfirmar()) { await criarPendencia({ tipo: "entrada", produtoId: p.id, produtoNome: p.nome, qtd: Number(f.qtd), validade: f.validade, obs: f.obs }); return toast("Entrada enviada. Fica pendente até a estoquista confirmar."); }
+    if (false) { await criarPendencia({ tipo: "entrada", produtoId: p.id, produtoNome: p.nome, qtd: Number(f.qtd), validade: f.validade, obs: f.obs }); return toast("Entrada enviada. Fica pendente até a estoquista confirmar."); }
     await darEntrada(p, f.qtd, f.validade, f.obs);
     toast("Entrada registrada.");
-  }, podeConfirmar() ? "Lançar" : "Enviar para confirmação");
+  }, "Lançar");
 }
 
 async function darEntrada(p, qtd, validade, obs = "") {
@@ -345,10 +345,10 @@ function modalBaixa(p) {
     <label>Observação<input name="obs"></label>`,
   async (f) => {
     if (p.controlado) f.obs = `[CONTROLADO · livro ✓ · ${f.receita}] ${f.obs || ""}`;
-    if (!podeConfirmar()) { await criarPendencia({ tipo: "saida", produtoId: p.id, produtoNome: p.nome, qtd: Number(f.qtd), sala: f.sala, responsavel: f.responsavel, obs: f.obs }); return toast("Retirada enviada. Fica pendente até a estoquista dar baixa."); }
+    if (false) { await criarPendencia({ tipo: "saida", produtoId: p.id, produtoNome: p.nome, qtd: Number(f.qtd), sala: f.sala, responsavel: f.responsavel, obs: f.obs }); return toast("Retirada enviada. Fica pendente até a estoquista dar baixa."); }
     await darBaixa(p, f.sala, f.qtd, f.responsavel, f.obs);
     toast(p.tipo === "consumo" ? "Baixa lançada como consumo." : `Reposto em ${nomeSala(f.sala)}.`);
-  }, podeConfirmar() ? "Dar baixa" : "Enviar para confirmação");
+  }, "Dar baixa");
 }
 
 async function darBaixa(p, sala, qtdTxt, responsavel, obs = "") {
@@ -624,7 +624,7 @@ async function telaFicha(v) {
     for (const i of linhas) {
       const it = itens.find((x) => x.id === i.dataset.id), qtd = Number(i.value);
       try {
-        if (!podeConfirmar()) { await criarPendencia({ tipo: "saida", produtoId: it.prod.id, produtoNome: it.prod.nome, qtd, sala: salaAtual, responsavel: resp, obs: "Ficha de reposição" }); pend++; }
+        if (false) { await criarPendencia({ tipo: "saida", produtoId: it.prod.id, produtoNome: it.prod.nome, qtd, sala: salaAtual, responsavel: resp, obs: "Ficha de reposição" }); pend++; }
         else { await darBaixa(it.prod, salaAtual, qtd, resp, "Ficha de reposição"); ok++; }
       } catch (e) { falhas.push(`${it.nome}: ${e.message}`); }
     }
@@ -1150,7 +1150,7 @@ async function telaAlertas(v) {
 
 /* ================= INÍCIO (5 PAINÉIS) ================= */
 async function telaPainel(v) {
-  const vis = SETORES.filter((x) => (!x.master || isMaster()) && (!x.entrevista || podeEntrevista()));
+  const vis = SETORES.filter((x) => (!x.master || isMaster()) && (!x.entrevista || podeEntrevista()) && (!x.gestao || podeGerente()));
   const tile = (x) => `<a class="tile" href="#${x.abas[0][0]}"><span class="tile-ico">${x.icone}</span><b>${x.n ? x.n + " · " : ""}${esc(x.titulo)}</b><span class="tile-info" id="info-${x.id}"></span></a>`;
   v.innerHTML = `<h2 class="ola">Olá, ${esc(usuario.nome)} 👋</h2>
     ${MODULOS.map((m) => { const itens = vis.filter((x) => x.mod === m.id); return itens.length ? `<section class="modulo"><h3 class="modulo-tit"><span>${m.icone}</span> ${esc(m.titulo)} <small>${esc(m.sub)}</small></h3><div class="tiles">${itens.map(tile).join("")}</div></section>` : ""; }).join("")}`;
