@@ -152,7 +152,7 @@ export const DESCRICOES = {
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[m]);
 export const htmlDescricao = (d, clinica, nome = "") => `<div class="cab"><b>Descrição de Cargo – ${esc(d.nome)}</b><br><small>${esc(clinica)} · Rubrica ____________</small></div>
-      <h3>1. Identificação do cargo</h3><table class="fa">${[["Empregador", CLINICA_NOME], ["Cargo", d.nome], ["CBO", d.cbo], ["Setor", d.setor], ["Superior imediato", d.superior], ["Regime de contratação", d.regime], ["Jornada e ponto", d.jornada], ["Remuneração", d.remuneracao]].map(([k, x]) => `<tr><td style="width:30%"><b>${k}</b></td><td>${esc(x)}</td></tr>`).join("")}</table>
+      <h3>1. Identificação do cargo</h3><table class="fa">${[["Empregador", clinica], ["Cargo", d.nome], ["CBO", d.cbo], ["Setor", d.setor], ["Superior imediato", d.superior], ["Regime de contratação", d.regime], ["Jornada e ponto", d.jornada], ["Remuneração", d.remuneracao]].map(([k, x]) => `<tr><td style="width:30%"><b>${k}</b></td><td>${esc(x)}</td></tr>`).join("")}</table>
       <h3>2. Missão do cargo</h3><p>${esc(d.missao)}</p>
       <h3>3. Atribuições e responsabilidades</h3><p class="peq">O empregado se obriga a todo e qualquer serviço compatível com sua condição pessoal e com as atribuições abaixo (art. 456, parágrafo único, da CLT). Os procedimentos detalhados constam do Manual de Rotinas da clínica, que integra esta descrição.</p>
       ${d.atribuicoes.map((s) => `<h4>${esc(s.titulo)}</h4><ul>${s.itens.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`).join("")}
