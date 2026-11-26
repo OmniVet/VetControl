@@ -11,7 +11,9 @@ import { GRUPOS_MERCADO } from "./equivalencias-mercado.js";
 import { lerPlanilhaClinica, COLUNAS_MODELO, COLUNAS_SALAS, NOME_ABA } from "./importar-planilha.js";
 import { resolverCombinacoes } from "./busca-exames.js";
 import { montarBusca } from "./busca-catalogo.js";
-import { EXECUTORES_IMAGEM, EXAMES_IMAGEM, EXAMES_IMAGEM_DETALHE } from "./firebase-config.js";
+import { IMAGEM_TABELA, LAB_VETPLUS } from "./servicos-tabela.js";
+import { chave } from "./busca-catalogo.js";
+import { EXECUTORES_IMAGEM, EXAMES_IMAGEM, EMAIL_ATENDIMENTO, LABS_PLANO } from "./firebase-config.js";
 import { firebaseConfig, MASTER_EMAIL, DISTRIBUIDORAS, MEDIDAS, SALAS, DIAS_ALERTA_VALIDADE, EXAMES, STATUS_EXAME, STATUS_REPOSICAO, INV_CATEGORIAS, INV_LOCAIS, INV_ESTADO, LABORATORIOS, CONVENIOS, ORIGENS, CLINICA, DIAS_SEM_USO, VACINAS, VACINAS_COMERCIAIS, DIAS_A_VENCER, DOMINIO_TUTOR, TIPOS_AMBULATORIO, TABELAS_PRECO, CATEGORIAS_SERVICO, VALIDADE_ORCAMENTO_DIAS, CATALOGO_INICIAL, GEMINI_API_KEY, GEMINI_MODEL, DIAS_ANALISE, DIAS_COBERTURA_MINIMO, DIAS_COBERTURA_IDEAL, GOOGLE_CSE_KEY, GOOGLE_CSE_CX } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
@@ -179,7 +181,8 @@ const SETORES = [
   { id: "laudos", mod: "exames", n: "2", titulo: "Laudos", icone: "📝", abas: [["laudos-pendentes", "2.1 Liberar laudos"], ["modelos", "2.2 Modelos de laudos"], ["laudos-liberados", "2.3 Consultar laudos liberados"]] },
   { id: "historico", mod: "exames", n: "3", titulo: "Histórico de exames", icone: "📊", abas: [["planilha", "Exames laboratoriais"], ["prestadores", "Imagem e prestadores"], ["producao", "Produção por médico (semana)"], ["comparativo", "Comparativo com laboratório"], ["exportar-exames", "Exportar relatórios de exames"]] },
   { id: "compras", mod: "estoque", n: "4", titulo: "Solicitação de compras", icone: "🛒", abas: [["solicitacoes", "Pedir algo ao estoquista"]] },
-  { id: "relatorios", mod: "geral", n: "5", titulo: "Relatórios gerais", icone: "📈", abas: [["relatorios", "Gerador de relatórios"]] },
+  { id: "repasse", mod: "estoque", n: "", titulo: "Repasse ou venda", icone: "🤝", abas: [["repasses", "Empréstimos e vendas (pessoa ou empresa)"]] },
+  { id: "relatorios", mod: "geral", n: "5", titulo: "Relatórios gerais", icone: "📈", gestao: true, abas: [["relatorios", "Gerador de relatórios"]] },
   { id: "estoque", mod: "estoque", n: "9", titulo: "Estoque", icone: "📦", abas: [["produtos", "9.1 Estoque geral"], ["limbo", "9.2 Limbo"], ["pedido", "9.3 Detalhes de pedido"], ["pendencias", "Pendências"], ["nfe", "Receber nota (XML)"], ["alertas", "Alertas"], ["equivalentes", "Medicamentos equivalentes"], ["cotacao", "Cotação"]] },
   { id: "reposicao", mod: "estoque", n: "", titulo: "Reposição por setor", icone: "🏥", abas: [["salas", "Salas, geladeiras e setores"], ["ficha", "Ficha de reposição"], ["semanal", "Relatório semanal de reposição"]] },
   { id: "inventario", mod: "estoque", n: "", titulo: "Inventário (patrimônio)", icone: "🪑", abas: [["inventario", "Equipamentos e móveis"]] },
@@ -190,15 +193,16 @@ const SETORES = [
   { id: "orcamentos", mod: "ambul", n: "8", titulo: "Orçamentos", icone: "💰", abas: [["orcamentos", "8.1 Histórico de orçamentos"], ["orcamento", "8.2 Novo orçamento"], ["servicos", "8.3 Banco de serviços"], ["pacotes", "Pacotes"]] },
   { id: "time-agenda", mod: "time", n: "", titulo: "Agenda de atividades do time", icone: "📋", abas: [["time-agenda", "Agenda de atividades"]] },
   { id: "time-relatorios", mod: "time", n: "", titulo: "Relatórios e histórico do time", icone: "📑", abas: [["time-relatorios", "Relatórios, avaliações e assinaturas"]] },
+  { id: "time-docs", mod: "time", n: "", titulo: "Documentação", icone: "🗂️", entrevista: true, abas: [["time-docs", "Documentos assinados por colaborador"], ["time-check", "Checklist do funcionário"], ["time-clinica", "Documentos da clínica"]] },
+  { id: "time-treino", mod: "time", n: "", titulo: "Treinamentos", icone: "🎓", entrevista: true, abas: [["time-treino", "Check-in de treinamentos"]] },
   { id: "time-presenca", mod: "time", n: "", titulo: "Presença do time", icone: "⏱", abas: [["time-presenca", "Registro e espelho de presença"]] },
-  { id: "entrevista", mod: "entrevista", n: "", titulo: "Entrevistas", icone: "🗣️", entrevista: true, abas: [["entrevista", "Entrevistas por tipo de vaga"]] },
+  { id: "entrevista", mod: "time", n: "", titulo: "Entrevista e descrição de cargo", icone: "🗣️", entrevista: true, abas: [["entrevista", "Entrevistas por tipo de vaga (ficha com o nome do candidato)"], ["time-cargos", "Descrição de cargo (imprimir com o nome)"]] },
 ];
 const MODULOS = [
   { id: "exames", titulo: "Módulo Exames", sub: "Exames, Laudos e Histórico de Exames", icone: "🧪" },
   { id: "estoque", titulo: "Módulo Estoque e Compras", sub: "Estoque, Inventário, Compras e Reposição por setor", icone: "📦" },
   { id: "ambul", titulo: "Módulo Ambulatorial e Recepção", sub: "Vacinação, Ambulatorial e Orçamentos", icone: "🩺" },
   { id: "time", titulo: "Módulo Nosso time", sub: "Agenda de atividades, relatórios/avaliações e presença", icone: "👥" },
-  { id: "entrevista", titulo: "Módulo Entrevista", sub: "Seleção de candidatos (só Master e Gerente)", icone: "🗣️" },
   { id: "geral", titulo: "Geral", sub: "Relatórios gerais e configurações", icone: "⚙️" }
 ];
 async function render() {
@@ -209,9 +213,9 @@ async function render() {
     <div class="setor-abas">${sec.abas.map(([r, n]) => `<a href="#${r}" class="${r === rota ? "ativo" : ""}">${n}</a>`).join("")}</div>` : "";
   atualizarBadge();
   const v = $("#view"); v.innerHTML = `<p class="muted">Carregando…</p>`;
-  const telas = { "nova-solicitacao": telaNovaSolicitacao, "busca-exames": telaBuscaExames, "laudos-pendentes": telaLaudosPendentes, "laudos-liberados": telaLaudosLiberados, producao: telaProducao, "exportar-exames": (v) => telaRelatorios(v, "exames"),
+  const telas = { "nova-solicitacao": telaNovaSolicitacao, "busca-exames": telaBuscaExames, repasses: telaRepasses, "laudos-pendentes": telaLaudosPendentes, "laudos-liberados": telaLaudosLiberados, producao: telaProducao, "exportar-exames": (v) => telaRelatorios(v, "exames"),
     ...TIME, ...ENTREVISTA, equivalentes: telaEquivalentes, vencimentos: telaVencimentos, vacinas: telaVacinas, pets: telaPets, ambulatorio: telaAmbulatorio, orcamento: telaOrcamento, orcamentos: telaOrcamentos, servicos: telaServicos, pacotes: telaPacotes, prestadores: (v) => telaPlanilha(v, "prest"), comparativo: telaComparativo, modelos: telaModelos, limbo: telaLimbo, pendencias: telaPendencias, planilha: telaPlanilha, catalogo: telaCatalogo, painel: telaPainel, alertas: telaAlertas, profissionais: telaProfissionais, cotacao: telaCotacao, inventario: telaInventario, nfe: telaNfe, solicitacoes: telaSolicitacoes, exames: telaExames, produtos: telaProdutos, salas: telaSalas, ficha: telaFicha, semanal: telaSemanal, pedido: telaPedido, relatorios: telaRelatorios, fornecedores: telaFornecedores, usuarios: telaUsuarios };
-  try { await (telas[rota] || telaPainel)(v); } catch (e) { v.innerHTML = `<p class="erro">Erro: ${esc(e.message)}</p>`; console.error(e); }
+  try { if (rota === "relatorios" && !podeGerente()) { v.innerHTML = `<p>Relatórios: somente Master e Gerente.</p>`; return; } await (telas[rota] || telaPainel)(v); } catch (e) { v.innerHTML = `<p class="erro">Erro: ${esc(e.message)}</p>`; console.error(e); }
   window.scrollTo(0, 0);
 }
 
@@ -226,7 +230,7 @@ async function telaProdutos(v) {
     ${podeConfirmar() ? `<button class="btn" id="btnPlan">📥 Importar planilha</button>` : ""}${isMaster() ? `<button class="btn" id="btnImport">Colar lista</button>` : ""}
     ${podeConfirmar() ? `<button class="btn" id="btnFotos">🖼 Buscar fotos</button><button class="btn" id="btnSug" title="Aplica o mínimo e o ideal sugeridos nos produtos com histórico suficiente">📊 Aplicar sugestões</button>` : ""}
     <button class="btn primary" id="btnNovo">+ Novo produto</button></div>
-  <p class="muted small">Contagem do <b>estoque central</b> apenas. As salas/setores e o limbo têm contagens próprias nas outras abas.${podeConfirmar() ? "" : " Suas entradas e retiradas ficam <b>pendentes</b> até a estoquista confirmar."}</p>
+  <p class="muted small">Contagem do <b>estoque central</b> apenas. As salas/setores e o limbo têm contagens próprias nas outras abas.</p>
   <div class="tabela-wrap"><table><thead><tr><th></th><th>Produto</th><th>Distribuidora</th><th>Medida</th><th>Tipo</th><th>No estoque / validade</th><th>Ideal</th><th>Mín.</th><th>Sugestão (últimos ${DIAS_ANALISE} dias)</th><th>Status</th><th>Ações</th></tr></thead><tbody id="tb"></tbody></table></div>`;
   const desenhar = () => {
     const b = $("#busca").value.toLowerCase(), c = $("#fCat").value;
@@ -293,7 +297,7 @@ function modalProduto(p = {}) {
     if (p.id) { await updateDoc(doc(db, "produtos", p.id), dados); toast("Produto atualizado."); return; }
     const q = Number(f.qtdInicial || 0);
     if (q > 0 && !f.valInicial) throw new Error("Informe a validade da quantidade inicial.");
-    const direto = podeConfirmar() && q > 0;
+    const direto = q > 0;
     dados.lotesEstoque = direto ? [{ qtd: q, validade: f.valInicial }] : []; dados.lotesLimbo = []; dados.criadoEm = serverTimestamp();
     const ref = await addDoc(collection(db, "produtos"), dados);
     if (direto) await log({ tipo: "entrada", produtoId: ref.id, produtoNome: dados.nome, qtd: q, validade: f.valInicial, local: "estoque" });
@@ -314,10 +318,10 @@ function modalEntrada(p) {
     <label>Validade<input type="date" name="validade" required></label></div>
     <label>Nota fiscal / observação<input name="obs"></label>`,
   async (f) => {
-    if (!podeConfirmar()) { await criarPendencia({ tipo: "entrada", produtoId: p.id, produtoNome: p.nome, qtd: Number(f.qtd), validade: f.validade, obs: f.obs }); return toast("Entrada enviada. Fica pendente até a estoquista confirmar."); }
+    if (false) { await criarPendencia({ tipo: "entrada", produtoId: p.id, produtoNome: p.nome, qtd: Number(f.qtd), validade: f.validade, obs: f.obs }); return toast("Entrada enviada. Fica pendente até a estoquista confirmar."); }
     await darEntrada(p, f.qtd, f.validade, f.obs);
     toast("Entrada registrada.");
-  }, podeConfirmar() ? "Lançar" : "Enviar para confirmação");
+  }, "Lançar");
 }
 
 async function darEntrada(p, qtd, validade, obs = "") {
@@ -341,10 +345,10 @@ function modalBaixa(p) {
     <label>Observação<input name="obs"></label>`,
   async (f) => {
     if (p.controlado) f.obs = `[CONTROLADO · livro ✓ · ${f.receita}] ${f.obs || ""}`;
-    if (!podeConfirmar()) { await criarPendencia({ tipo: "saida", produtoId: p.id, produtoNome: p.nome, qtd: Number(f.qtd), sala: f.sala, responsavel: f.responsavel, obs: f.obs }); return toast("Retirada enviada. Fica pendente até a estoquista dar baixa."); }
+    if (false) { await criarPendencia({ tipo: "saida", produtoId: p.id, produtoNome: p.nome, qtd: Number(f.qtd), sala: f.sala, responsavel: f.responsavel, obs: f.obs }); return toast("Retirada enviada. Fica pendente até a estoquista dar baixa."); }
     await darBaixa(p, f.sala, f.qtd, f.responsavel, f.obs);
     toast(p.tipo === "consumo" ? "Baixa lançada como consumo." : `Reposto em ${nomeSala(f.sala)}.`);
-  }, podeConfirmar() ? "Dar baixa" : "Enviar para confirmação");
+  }, "Dar baixa");
 }
 
 async function darBaixa(p, sala, qtdTxt, responsavel, obs = "") {
@@ -620,7 +624,7 @@ async function telaFicha(v) {
     for (const i of linhas) {
       const it = itens.find((x) => x.id === i.dataset.id), qtd = Number(i.value);
       try {
-        if (!podeConfirmar()) { await criarPendencia({ tipo: "saida", produtoId: it.prod.id, produtoNome: it.prod.nome, qtd, sala: salaAtual, responsavel: resp, obs: "Ficha de reposição" }); pend++; }
+        if (false) { await criarPendencia({ tipo: "saida", produtoId: it.prod.id, produtoNome: it.prod.nome, qtd, sala: salaAtual, responsavel: resp, obs: "Ficha de reposição" }); pend++; }
         else { await darBaixa(it.prod, salaAtual, qtd, resp, "Ficha de reposição"); ok++; }
       } catch (e) { falhas.push(`${it.nome}: ${e.message}`); }
     }
@@ -786,7 +790,13 @@ async function telaUsuarios(v) {
       // App secundário: cria o login sem deslogar o master
       const sec = initializeApp(firebaseConfig, "sec" + Date.now());
       try {
-        const cred = await createUserWithEmailAndPassword(getAuth(sec), f.email, f.senha);
+        let cred;
+        try { cred = await createUserWithEmailAndPassword(getAuth(sec), f.email, f.senha); }
+        catch (e1) { // e-mail já tem login (cadastro anterior que ficou pela metade): reaproveita se a senha for a mesma
+          if (e1.code !== "auth/email-already-in-use") throw e1;
+          try { cred = await signInWithEmailAndPassword(getAuth(sec), f.email, f.senha); }
+          catch { throw new Error("Este e-mail já tem um login criado antes (mas sem ficha na equipe). Digite a MESMA senha usada naquela tentativa, ou apague esse e-mail em Firebase → Authentication → Users e cadastre de novo."); } }
+        if ((await getDoc(doc(db, "users", cred.user.uid))).exists()) throw new Error("Este e-mail já está cadastrado na equipe.");
         await setDoc(doc(db, "users", cred.user.uid), { nome: f.nome, email: f.email, role: f.role, cargo: f.cargo, ativo: true, criadoEm: serverTimestamp() });
         await signOut(getAuth(sec));
       } catch (e) { throw new Error(e.code === "auth/email-already-in-use" ? "Este e-mail já está cadastrado." : e.message); }
@@ -1140,7 +1150,7 @@ async function telaAlertas(v) {
 
 /* ================= INÍCIO (5 PAINÉIS) ================= */
 async function telaPainel(v) {
-  const vis = SETORES.filter((x) => (!x.master || isMaster()) && (!x.entrevista || podeEntrevista()));
+  const vis = SETORES.filter((x) => (!x.master || isMaster()) && (!x.entrevista || podeEntrevista()) && (!x.gestao || podeGerente()));
   const tile = (x) => `<a class="tile" href="#${x.abas[0][0]}"><span class="tile-ico">${x.icone}</span><b>${x.n ? x.n + " · " : ""}${esc(x.titulo)}</b><span class="tile-info" id="info-${x.id}"></span></a>`;
   v.innerHTML = `<h2 class="ola">Olá, ${esc(usuario.nome)} 👋</h2>
     ${MODULOS.map((m) => { const itens = vis.filter((x) => x.mod === m.id); return itens.length ? `<section class="modulo"><h3 class="modulo-tit"><span>${m.icone}</span> ${esc(m.titulo)} <small>${esc(m.sub)}</small></h3><div class="tiles">${itens.map(tile).join("")}</div></section>` : ""; }).join("")}`;
@@ -1165,7 +1175,7 @@ const isPrest = (o) => ["Imagem", "Prestador"].includes(o?.grupo);
 const origemDe = (e, x = {}) => e.origem || ((e.pagamento || x.pagamento) === "Convênio" ? String(e.convenio || x.convenio || "").toUpperCase() : "PARTICULAR");
 const grupoDe = (nome) => Object.entries(EXAMES).find(([, l]) => l.includes(nome))?.[0] || "Outros";
 const normEx = (e) => (typeof e === "string" ? { nome: e, grupo: grupoDe(e) } : e);
-const descEx = (e) => { e = normEx(e); const pg = e.pagamento ? ` [${e.pagamento === "Convênio" ? e.convenio : "Particular"}]` : ""; return (isPrest(e) ? `${e.nome}${e.realizadoPor ? " — realizou: " + e.realizadoPor : ""}${e.laudoPor ? " · laudo: " + e.laudoPor : ""}` : `${e.nome}${e.laboratorio ? " — " + e.laboratorio : ""}`) + pg; };
+const descEx = (e) => { e = normEx(e); const pg = e.pagamento ? ` [${e.pagamento === "Convênio" ? e.convenio : "Particular"}]` : ""; return (isPrest(e) ? `${e.nome}${e.regiao ? " (" + e.regiao + ")" : ""}${e.realizadoPor ? " — realizou: " + e.realizadoPor : ""}${e.laudoPor ? " · laudo: " + e.laudoPor : ""}` : `${e.nome}${e.laboratorio ? " — " + e.laboratorio : ""}`) + pg; };
 async function carregarProfissionais() { return (await getDocs(query(collection(db, "profissionais"), orderBy("nome")))).docs.map((d) => ({ id: d.id, ...d.data() })).filter((p) => p.ativo !== false); }
 
 let filtroEx = { status: "abertos", busca: "", pag: "", dest: "" };
@@ -1223,12 +1233,15 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
   const cat = await carregarCatalogo();
   if (!cat.length) { toast("Cadastre o catálogo de exames primeiro (aba Catálogo de exames)."); location.hash = "#catalogo"; return; }
   let itens = (x.exames || []).map(normEx).map((e) => ({ ...e }));
-  const imgBase = new Map(); [...EXAMES_IMAGEM, ...EXAMES_IMAGEM_DETALHE, ...cat.filter(isPrest).map((c) => c.nome)].forEach((n) => { if (!imgBase.has(norm(n))) imgBase.set(norm(n), n); });
-  const lista = [...cat.filter((c) => !isPrest(c)), ...[...imgBase.values()].flatMap((n) => { const c0 = cat.find((c) => isPrest(c) && norm(c.nome) === norm(n)) || {};
-    return EXECUTORES_IMAGEM.map((p) => ({ ...c0, id: "img|" + n + "|" + p, catId: c0.id || slugId(n, "imagem"), nome: n, grupo: "Imagem", realizadoPor: p, tipo: "" })); })];
+  const imgBase = new Map(); [...EXAMES_IMAGEM, ...cat.filter(isPrest).map((c) => c.nome)].forEach((n) => { if (!imgBase.has(norm(n))) imgBase.set(norm(n), n); });
+  const porExame = new Map(); IMAGEM_TABELA.forEach((t) => { const k = norm(t.exame); if (!porExame.has(k)) porExame.set(k, { nome: t.exame, profs: [] }); porExame.get(k).profs.push({ p: t.profissional, valor: t.valor }); });
+  const listaImg = [...porExame.values()].sort((p, q) => p.nome.localeCompare(q.nome, "pt")).map((g) => ({ id: "img|" + g.nome, catId: slugId(g.nome, "imagem"), nome: g.nome, grupo: "Imagem", realizadoPor: "", tipo: "", profs: g.profs }))
+    .concat([...imgBase.values()].filter((n) => !porExame.has(norm(n))).map((n) => { const c0 = cat.find((c) => isPrest(c) && norm(c.nome) === norm(n)) || {}; return { ...c0, id: "img|" + n, catId: c0.id || slugId(n, "imagem"), nome: n, grupo: "Imagem", realizadoPor: "", tipo: "", profs: [] }; }));
+  const listaVP = LAB_VETPLUS.map((t) => ({ id: "vp|" + t.codigo, catId: slugId(t.nome, "vetplus"), nome: t.nome, laboratorio: "VETPLUS", categoria: t.categoria, tipo: "individual", grupo: "Laboratorial", valor: t.valor, tubos: null, analitos: 0, prazo: "feito na clínica", composicao: [] }));
+  const lista = [...cat.filter((c) => !isPrest(c)), ...listaVP, ...listaImg];
   let modoAdd = null, pend = null, tipoReq = "Laboratorial";
   const pag0 = itens[0] ? { pagamento: itens[0].pagamento, convenio: itens[0].convenio } : { pagamento: "Particular", convenio: "" };
-  const nomesProf = [...new Set([...EXECUTORES_IMAGEM, ...profs.map((p) => p.nome)])], vetIni = x.veterinario || meuProfissional(profs)?.nome || "";
+  const nomesProf = [...new Set([...EXECUTORES_IMAGEM, ...IMAGEM_TABELA.map((t) => t.profissional), ...profs.map((p) => p.nome)])], vetIni = x.veterinario || meuProfissional(profs)?.nome || "";
   abrirModal(x.id ? "Editar requisição de exames" : "Nova requisição de exames", `
     <h3 style="margin:4px 0">1. Dados do paciente</h3>
     <label>Prioridade<select name="prioridade">${opts(["Rotina", "Urgente"], x.prioridade)}</select></label>
@@ -1244,7 +1257,7 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
     <h3 style="margin:12px 0 4px">2. Exames da requisição</h3>
     <div class="barra"><b>O que você vai pedir?</b><button type="button" class="btn primary" id="mLab">🧪 Exame laboratorial</button><button type="button" class="btn primary" id="mImg">🩻 Exame de imagem</button></div>
     <div id="boxAdd" class="hidden">
-    <label id="lblBusca">Buscar na lista (ex.: <i>albumina</i>, <i>ultrassom dhyego</i>, <i>colesterol veter</i>)<input id="addCat" autocomplete="off" placeholder="Digite para filtrar — a lista completa fica logo abaixo"></label>
+    <label id="lblBusca">Buscar na lista (ex.: <i>albumina</i>, <i>colesterol veter</i>)<input id="addCat" autocomplete="off" placeholder="Digite para filtrar — a lista completa fica logo abaixo"></label>
     <div id="resCat" class="res-cat" style="max-height:300px"></div></div>
     <div id="pendBox" class="card hidden" style="padding:10px;border:2px solid #2f6fd0"></div>
     <div id="itensEx"></div><div id="rodapeEx"></div>
@@ -1253,6 +1266,7 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
     lerItens();
     if (!itens.length) throw new Error("Adicione pelo menos um exame.");
     if (itens.some((e) => !e.realizadoEm)) throw new Error("Informe a data e hora de realização de cada exame.");
+    if (itens.some((e) => isPrest(e) && !e.realizadoPor)) throw new Error("Escolha o profissional que vai realizar cada exame de imagem.");
     itens.forEach((e) => { e.origem = e.pagamento === "Convênio" ? String(e.convenio).toUpperCase() : "PARTICULAR";
       if (/vetplus/i.test(e.laboratorio || "") && e.laudo !== "SIM") e.laudoPendente = true; }); // VETPLUS = laudo feito aqui: vai para "Liberar laudos"
     const tipoDe = (g) => (g.every(isPrest) ? "Imagem" : g.some(isPrest) ? "Mista" : "Laboratorial"), grupos = [itens]; // uma REQUISIÇÃO DE EXAMES leva vários exames, de vários laboratórios/profissionais, cada um com seu pagamento
@@ -1261,7 +1275,7 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
     const origTipo = null;
     let iOrig = grupos.findIndex((g) => tipoDe(g) === origTipo); if (iOrig < 0) iOrig = 0;
     for (const [i, g] of grupos.entries()) {
-      const d = { ...base, tipoReq: tipoDe(g), exames: g, pagamento: g.some((e) => e.pagamento === "Convênio") ? "Convênio" : "Particular", convenio: [...new Set(g.map((e) => e.convenio).filter(Boolean))].join(", ") };
+      const d = JSON.parse(JSON.stringify({ ...base, tipoReq: tipoDe(g), exames: g, pagamento: g.some((e) => e.pagamento === "Convênio") ? "Convênio" : "Particular", convenio: [...new Set(g.map((e) => e.convenio).filter(Boolean))].join(", ") })); // JSON: tira campos "undefined", que o Firestore recusa
       if (x.id && i === iOrig) await updateDoc(doc(db, "exames", x.id), { ...d, editado: true, edicoes: [...(x.edicoes || []), { por: usuario.nome, em: new Date().toISOString() }] });
       else await addDoc(collection(db, "exames"), { ...d, status: "Solicitado", historico: [{ status: "Solicitado", por: usuario.nome, em: new Date().toISOString() }], criadoPor: usuario.nome, criadoUid: usuario.uid, criadoEm: serverTimestamp() });
     }
@@ -1274,11 +1288,12 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
   function lerItens() {
     $("#itensEx").querySelectorAll("[data-k]").forEach((r) => { const e = itens[r.dataset.k]; if (!e) return;
       e.realizadoEm = r.querySelector(".ih").value; e.pagamento = r.querySelector(".ip").value; e.convenio = e.pagamento === "Convênio" ? r.querySelector(".ic").value : "";
-      if (isPrest(e)) { e.realizadoPor = r.querySelector(".ir").value; e.laudoPor = r.querySelector(".il").value; } });
+      if (isPrest(e)) { e.realizadoPor = r.querySelector(".ir").value; e.laudoPor = r.querySelector(".il").value; e.regiao = r.querySelector(".id").value; } else { const sl = r.querySelector(".ilab"); if (sl) e.laboratorio = sl.value; } });
     $("#itensEx").querySelectorAll("[data-pa]").forEach((r) => { const e = itens[r.dataset.pa]; if (e) e.pa = [...r.querySelectorAll("input")].map((i) => i.value); });
   }
   function desenhar() {
-    const dest = (e) => isPrest(e) ? `Realizado por <input class="ir" list="dlProf" value="${esc(e.realizadoPor)}" placeholder="médico ou empresa"><br>Laudo <select class="il">${`<option value="">—</option>` + profs.map((p) => `<option ${p.nome === e.laudoPor ? "selected" : ""}>${esc(p.nome)}</option>`).join("")}</select>` : `<span class="tag neutro">${esc(e.laboratorio || "—")}</span>`;
+    const labsSel = [...new Set([...LABORATORIOS, ...cat.map((c) => c.laboratorio).filter(Boolean)])].sort();
+    const dest = (e) => isPrest(e) ? `Descrição <input class="id" value="${esc(e.regiao || "")}" placeholder="ex.: crânio e tórax (como o médico pediu)"><br>Realizado por <select class="ir"><option value="">— escolha —</option>${[...new Set([...nomesProf, e.realizadoPor].filter(Boolean))].map((n) => `<option ${n === e.realizadoPor ? "selected" : ""}>${esc(n)}</option>`).join("")}</select><br>Laudo <select class="il">${`<option value="">—</option>` + profs.map((p) => `<option ${p.nome === e.laudoPor ? "selected" : ""}>${esc(p.nome)}</option>`).join("")}</select>` : `<select class="ilab">${labsSel.map((l) => `<option ${l === e.laboratorio ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
     $("#itensEx").innerHTML = itens.length ? `<datalist id="dlProf">${nomesProf.map((n) => `<option value="${esc(n)}">`).join("")}</datalist><table><thead><tr><th>Exame</th><th>Laboratório / realizado por</th><th>Pagamento</th><th>Valor</th><th>Realização</th><th></th></tr></thead><tbody>${itens.map((e, k) => `<tr data-k="${k}">
       <td><b>${esc(e.nome)}</b>${e.composicao?.length ? `<div class="muted small">Inclui: ${e.composicao.map(esc).join(", ")}</div>` : ""}<div class="small muted">⏱ Liberação: ${esc(prazoDe(e, isPrest(e)))}</div></td>
       <td class="small">${dest(e)}</td>
@@ -1288,7 +1303,7 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
       <td><button type="button" class="btn small danger" data-rmk="${k}">✕</button></td></tr>
       ${ehPA(e) ? `<tr data-pa="${k}"><td colspan="6"><b>Aferições de pressão arterial sistólica (mmHg)</b> <span class="muted small">até 5 valores — vão para o laudo</span><div class="duas5">${[0, 1, 2, 3, 4].map((j) => `<input type="number" min="0" placeholder="${j + 1}ª" value="${esc((e.pa || [])[j] ?? "")}">`).join("")}</div></td></tr>` : ""}`).join("")}</tbody></table>` : `<p class="muted small">Nenhum exame adicionado.</p>`;
     $("#itensEx").querySelectorAll(".ip").forEach((s) => (s.onchange = () => { lerItens(); desenhar(); }));
-    $("#itensEx").querySelectorAll(".ir").forEach((s) => (s.onchange = () => { lerItens(); desenhar(); }));
+    $("#itensEx").querySelectorAll(".ilab").forEach((s) => (s.onchange = () => { lerItens(); desenhar(); }));
     $("#itensEx").querySelectorAll("[data-rmk]").forEach((b) => (b.onclick = () => { lerItens(); itens.splice(b.dataset.rmk, 1); desenhar(); }));
     rodape();
   }
@@ -1299,24 +1314,38 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
         <div style="margin-top:6px"><b>Total:</b> ${Object.entries(tb.total).filter(([, n]) => n).map(([c, n]) => `<span class="tubo-bol" style="background:${COR_TUBO[c][1]}"></span> ${n} ${COR_TUBO[c][0]}`).join(" &nbsp; ") || "—"}</div></div>` : "");
   }
   function buscar() {
-    const q = norm($("#addCat").value).split(/\s+/).filter(Boolean), nl = (c) => norm(`${c.nome} ${c.laboratorio || ""} ${c.categoria || ""} ${c.realizadoPor || ""}`);
+    const q = norm($("#addCat").value).split(/\s+/).filter(Boolean), nl = (c) => norm(`${c.nome} ${c.laboratorio || ""} ${c.categoria || ""} ${(c.profs || []).map((p) => p.p).join(" ")}`);
     const r = lista.filter((c) => modoAdd && isPrest(c) === (modoAdd === "Imagem") && (() => { const t = nl(c); return q.every((w) => t.includes(w)); })());
-    $("#resCat").innerHTML = r.map((c) => `<button type="button" class="res-item" data-id="${esc(c.id)}"><b>${esc(c.nome)}</b> <span class="tag neutro">${esc(isPrest(c) ? "Imagem" + (c.realizadoPor ? " · " + c.realizadoPor : "") : c.laboratorio)}</span> <span class="muted small">${esc(c.tipo && c.tipo !== "individual" ? c.tipo + " · " : "")}⏱ ${esc(prazoDe(c, isPrest(c)))}</span>${c.valor ? `<span style="float:right">${brl(c.valor)}</span>` : ""}</button>`).join("") || `<p class="muted small">Nada encontrado na lista.</p>`;
+    $("#resCat").innerHTML = r.map((c) => `<button type="button" class="res-item" data-id="${esc(c.id)}"><b>${esc(c.nome)}</b> <span class="tag neutro">${esc(isPrest(c) ? "Imagem" : c.laboratorio)}</span> <span class="muted small">${c.profs?.length ? esc(c.profs.map((p) => p.p).join(", ")) + " · " : ""}${esc(c.tipo && c.tipo !== "individual" ? c.tipo + " · " : "")}${c.profs?.length ? "" : "⏱ " + esc(prazoDe(c, isPrest(c)))}</span>${c.valor ? `<span style="float:right">${brl(c.valor)}</span>` : ""}</button>`).join("") || `<p class="muted small">Nada encontrado na lista.</p>`;
   }
   $("#addCat").oninput = buscar;
   $("#resCat").onclick = (e) => {
     const b = e.target.closest("[data-id]"); if (!b) return; const c = lista.find((c) => c.id === b.dataset.id); if (!c) return;
     pend = c; const bx = $("#pendBox"); bx.classList.remove("hidden");
-    bx.innerHTML = `<b>${esc(c.nome)}</b> <span class="tag neutro">${esc(isPrest(c) ? "Imagem · " + (c.realizadoPor || "") : c.laboratorio)}</span>
+    const ehPerfil = !isPrest(c) && ["perfil", "painel"].includes(c.tipo) && (c.composicao || []).length;
+    bx.innerHTML = `<b>${esc(c.nome)}</b> <span class="tag neutro">${esc(isPrest(c) ? "Imagem" : c.laboratorio)}</span>
+      ${isPrest(c) ? `<label>Profissional que realiza<select id="pgProf"></select></label>` : ""}
       <div class="duas"><label>Este exame é<select id="pgTipo"><option>Particular</option><option value="Plano">Plano de saúde</option></select></label>
       <label id="pgPlanoBox" class="hidden">Qual plano<select id="pgPlano">${opts(CONVENIOS, "")}</select></label></div>
+      <p id="pgAviso" class="small hidden" style="color:#b25e00">Plano de saúde geralmente não aceita perfil: este perfil será lançado <b>exame por exame</b> (${(c.composicao || []).length} exames).</p>
       <div class="barra"><button type="button" class="btn primary" id="pgOk">Adicionar à requisição</button><button type="button" class="btn" id="pgNao">Cancelar</button></div>`;
-    $("#pgTipo").onchange = () => $("#pgPlanoBox").classList.toggle("hidden", $("#pgTipo").value !== "Plano");
+    const profSel = () => { if (!isPrest(c)) return; const pl = $("#pgTipo").value === "Plano", cur = $("#pgProf").value;
+      $("#pgProf").innerHTML = `<option value="">— escolha —</option>` + (c.profs?.length ? c.profs : nomesProf.map((p) => ({ p }))).map((x) => `<option value="${esc(x.p)}" ${x.p === cur ? "selected" : ""}>${esc(x.p)}${x.valor && !pl ? " — " + brl(x.valor) : ""}</option>`).join(""); };
+    const mudou = () => { const pl = $("#pgTipo").value === "Plano"; $("#pgPlanoBox").classList.toggle("hidden", !pl); $("#pgAviso").classList.toggle("hidden", !(pl && ehPerfil)); profSel(); };
+    $("#pgTipo").onchange = mudou; mudou();
     $("#pgNao").onclick = () => { pend = null; bx.classList.add("hidden"); };
-    $("#pgOk").onclick = () => { const pl = $("#pgTipo").value === "Plano";
-      lerItens(); itens.push({ realizadoEm: $("#dtColeta").value || agoraLocal(), catId: c.catId || c.id, nome: c.nome, grupo: c.grupo, realizadoPor: c.realizadoPor || "", laboratorio: isPrest(c) ? "" : c.laboratorio, pontos: Number(c.pontos || 1), pagamento: pl ? "Convênio" : "Particular", convenio: pl ? $("#pgPlano").value : "",
-        valor: c.valor || 0, tubos: c.tubos || null, analitos: c.analitos || 0, prazo: c.prazo || "", composicao: c.composicao || [], coleta: isPrest(c) ? null : { status: "Aguardando" } });
-      pend = null; bx.classList.add("hidden"); $("#addCat").value = ""; buscar(); desenhar(); toast("Exame incluído. Pode escolher o próximo."); };
+    $("#pgOk").onclick = () => { const pl = $("#pgTipo").value === "Plano", pg = { pagamento: pl ? "Convênio" : "Particular", convenio: pl ? $("#pgPlano").value : "" }, quando = $("#dtColeta").value || agoraLocal();
+      const prof = isPrest(c) ? $("#pgProf").value : ""; if (isPrest(c) && !prof) return toast("Escolha o profissional que realiza o exame.");
+      const base = (k, extra = {}) => ({ realizadoEm: quando, catId: k.catId || k.id, nome: k.nome, grupo: k.grupo, realizadoPor: prof, laboratorio: isPrest(k) ? "" : k.laboratorio, pontos: Number(k.pontos || 1), ...pg, valor: k.valor || 0, tubos: k.tubos || null, analitos: k.analitos || 0, prazo: k.prazo || "", composicao: k.composicao || [], coleta: isPrest(k) ? null : { status: "Aguardando" }, ...extra });
+      lerItens(); let faltou = [];
+      if (pl && ehPerfil) { // plano: um por um (individuais, do mesmo laboratório quando existir)
+        const indiv = cat.filter((k) => !isPrest(k) && k.tipo === "individual");
+        c.composicao.forEach((nm) => { const ch = chave(nm), ok = indiv.filter((k) => chave(k.nome) === ch); const k = ok.find((z) => z.laboratorio === c.laboratorio) || [...ok].sort((p, q) => p.valor - q.valor)[0];
+          if (k) itens.push(base(k, { obsPerfil: c.nome })); else faltou.push(nm); });
+      } else { const v = c.profs?.find((x) => x.p === prof)?.valor; itens.push(base(c, v ? { valor: v } : {})); }
+      if (pl && LABS_PLANO?.length) itens.forEach((e) => { if (e.pagamento === "Convênio" && !isPrest(e) && !LABS_PLANO.includes(e.laboratorio)) e.laboratorio = LABS_PLANO[0]; });
+      pend = null; bx.classList.add("hidden"); $("#addCat").value = ""; buscar(); desenhar();
+      toast(faltou.length ? `Incluído. Sem exame avulso para: ${faltou.join(", ")} — inclua à mão.` : "Exame incluído. Pode escolher o próximo."); };
   };
   desenhar();
 }
@@ -1346,7 +1375,7 @@ function htmlSolicitacao(x, bob, prof) {
 function assinaturaHtml(prof, nome, crmv) {
   return `<div class="ass ${prof?.assinatura ? "" : "sem"}">${prof?.assinatura ? `<img src="${prof.assinatura}">` : ""}<div class="linha">${esc(prof?.nome || nome || "")}<br><small>Médico(a) Veterinário(a)${(prof?.crmv || crmv) ? " · CRMV " + esc(prof?.crmv || crmv) : ""}</small></div></div>`;
 }
-function docImpressao(corpo, fmt, titulo) {
+function docImpressao(corpo, fmt, titulo, extraCss = "") {
   const bob = fmt !== "a4", larg = fmt === "58" ? "54mm" : "74mm";
   const w = window.open("", "_blank");
   w.document.write(`<html><head><title>${esc(titulo)}</title><style>
@@ -1358,6 +1387,7 @@ function docImpressao(corpo, fmt, titulo) {
     .texto{white-space:pre-wrap;line-height:1.5}
     .ass{margin-top:${bob ? "20px" : "50px"};text-align:center}.ass img{max-height:70px;max-width:220px;display:block;margin:0 auto -8px}
     .ass.sem{margin-top:${bob ? "8px" : "22px"}}.linha{border-top:1px solid #000;display:inline-block;padding-top:4px;min-width:${bob ? "90%" : "260px"}}
+    ${extraCss}
   </style></head><body>${corpo}<script>window.onload=()=>print()<\/script></body></html>`);
   w.document.close();
 }
@@ -1648,21 +1678,66 @@ async function emitirLaudo(x, e, k, profs) {
     const ass = form.assImg.files[0] ? await comprimirAssinatura(form.assImg.files[0]) : f.usaAss ? p.assinatura || "" : "";
     const imagens = []; for (const fl of [...form.imgs.files].slice(0, 4)) imagens.push(await comprimirImagem(fl));
     if (JSON.stringify(imagens).length + ass.length > 800000) throw new Error("Imagens muito pesadas. Use menos imagens ou imagens menores.");
-    const ref = await addDoc(collection(db, "laudos"), { exameId: x.id || "", k, paciente: x.paciente, tutor: x.tutor, solicitante: x.veterinario || "", dataAbertura: f.dataAbertura || "", pacienteAvulso: !x.id, exame: e.nome, texto: f.texto, profissionalId: p.id, profissional: p.nome, crmv: p.crmv || "",
-      assinatura: ass, imagens, dataLaudo: f.dataLaudo, liberadoPor: usuario.nome, liberadoEm: serverTimestamp() });
+    const ref = await addDoc(collection(db, "laudos"), { exameId: x.id || "", k, paciente: x.paciente, tutor: x.tutor, solicitante: x.veterinario || "", crmvSolicitante: x.crmv || "", especie: x.especie || "", raca: x.raca || "", sexo: x.sexo || "", idade: x.idade || "", peso: x.peso || "", dataAbertura: f.dataAbertura || "", pacienteAvulso: !x.id, exame: e.nome, texto: f.texto, profissionalId: p.id, profissional: p.nome, crmv: p.crmv || "",
+      assinatura: ass, imagens, dataLaudo: f.dataLaudo, regiao: e.regiao || "", liberadoPor: usuario.nome, liberadoUid: usuario.uid, liberadoEm: serverTimestamp() });
     if (x.id) { await salvarCampo(x.id, k, "laudoId", ref.id); await salvarCampo(x.id, k, "laudo", "SIM"); }
-    imprimirLaudo({ paciente: x.paciente, tutor: x.tutor, solicitante: x.veterinario, dataAbertura: f.dataAbertura, exame: e.nome, texto: f.texto, profissional: p.nome, crmv: p.crmv, assinatura: ass, imagens, dataLaudo: f.dataLaudo, liberadoEm: null }, f.fmt);
+    imprimirLaudo({ regiao: e.regiao, paciente: x.paciente, tutor: x.tutor, solicitante: x.veterinario, crmvSolicitante: x.crmv, especie: x.especie, raca: x.raca, sexo: x.sexo, idade: x.idade, peso: x.peso, dataAbertura: f.dataAbertura, exame: e.nome, texto: f.texto, profissional: p.nome, crmv: p.crmv, assinatura: ass, imagens, dataLaudo: f.dataLaudo, liberadoEm: null }, f.fmt);
     toast("Laudo liberado e salvo.");
   }, "Liberar laudo e imprimir");
   const aplicar = () => { const m = ms.find((m) => m.id === $("#lMod").value); const p = permitidos.find((p) => p.id === $("#lProf").value); $("#lTxt").value = preencher(m?.conteudo || (ehPA(e) ? "Aferição de pressão arterial sistólica\nPaciente: {{paciente}} — Tutor: {{tutor}}\n\n{{pa}}\n\nObservações:\n" : ""), p); };
   $("#lMod").onchange = aplicar; $("#lProf").onchange = aplicar; $("#lAbre").onchange = aplicar; aplicar();
 }
+const LAUDO_CSS = `*{box-sizing:border-box}body{font-family:"Segoe UI",Roboto,Arial,sans-serif;font-size:12.5px;color:#1f2d3d;max-width:186mm;margin:0 auto;background:#fff}
+ .topo{height:7px;background:linear-gradient(90deg,#0b3d91,#1e88e5 60%,#26c6da);border-radius:0 0 6px 6px}
+ .lh{display:flex;align-items:center;gap:16px;padding:14px 0 12px;border-bottom:1px solid #dbe5f1}
+ .lh img{max-height:74px;max-width:140px;object-fit:contain}
+ .lh .tit{flex:1;border-left:3px solid #1e88e5;padding-left:14px}.lh .tit small{display:block;letter-spacing:3px;color:#1e88e5;font-weight:700;font-size:10px}
+ .lh .tit h1{margin:2px 0 0;font-size:23px;line-height:1.15;color:#0b2e63;text-align:left;font-weight:700}
+ .clin{margin-top:6px;font-size:10.5px;color:#5b6b7f;line-height:1.5}
+ .pac{display:grid;grid-template-columns:1fr 1fr;gap:6px 22px;background:#f3f7fc;border:1px solid #dbe5f1;border-radius:10px;padding:11px 14px;margin:14px 0 6px;font-size:11.5px}
+ .pac span{display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;color:#6b7c93}.pac b{font-size:13px;color:#10284d;font-weight:600}
+ .res{line-height:1.65;font-size:13px;margin-top:10px}
+ .res h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#0b3d91;margin:16px 0 5px;padding:3px 0 3px 10px;border-left:4px solid #1e88e5;background:linear-gradient(90deg,#eaf3fd,transparent)}
+ .res p{margin:3px 0}.res .k{font-weight:600;color:#12315f}
+ .imgs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}.imgs img{width:100%;max-height:250px;object-fit:contain;border:1px solid #dbe5f1;border-radius:8px;padding:4px;background:#fafcff}
+ .datas{font-size:10.5px;color:#6b7c93;text-align:right;margin-top:18px}
+ .rod{margin-top:20px;border-top:1px solid #dbe5f1;padding-top:6px;text-align:center;font-size:9.5px;color:#8a99ad}
+ .ass{margin-top:34px!important}.linha{border-top:1px solid #1f2d3d!important;font-size:12px}
+ .barra-pdf{position:sticky;top:0;background:#0b2e63;color:#fff;padding:10px 14px;display:flex;gap:10px;align-items:center;margin:0 -8px 10px;z-index:5;font-family:Arial,sans-serif}
+ .barra-pdf button{background:#fff;color:#0b2e63;border:0;border-radius:6px;padding:8px 14px;font-weight:700;cursor:pointer}.barra-pdf span{flex:1;font-size:12px;opacity:.85}
+ @media print{.barra-pdf{display:none}}`;
+function formatarLaudo(t) {
+  return String(t || "").split(/\r?\n/).map((ln) => { const s = ln.trim(); if (!s || /^[=\-_*]{3,}$/.test(s)) return s ? "" : `<p>&nbsp;</p>`;
+    if (/^[A-ZÁÉÍÓÚÂÊÔÃÕÇ0-9 \/()+,.\-–]{4,60}:?$/.test(s) && /[A-ZÁÉÍÓÚÂÊÔÃÕÇ]{3}/.test(s)) return `<h2>${esc(s.replace(/:$/, ""))}</h2>`;
+    const m = s.match(/^([^:]{2,45}):\s*(.*)$/); if (m) return `<p><span class="k">${esc(m[1])}:</span> ${esc(m[2])}</p>`;
+    return `<p>${esc(s)}</p>`; }).join("");
+}
 function imprimirLaudo(l, fmt = "a4") {
-  docImpressao(`<div class="cab"><img src="${new URL(CLINICA.logoLaudo || "logo-vetplus.png", location.href).href}" alt="" style="max-height:70px;display:block;margin:0 auto 4px" onerror="this.remove()"><b>${esc(CLINICA.nome)}</b><br><small>${[CLINICA.cnpj && "CNPJ " + CLINICA.cnpj, CLINICA.endereco, CLINICA.telefone && "Tel. " + CLINICA.telefone, CLINICA.whatsapp && "WhatsApp " + CLINICA.whatsapp].filter(Boolean).map(esc).join(" · ")}</small></div>
-    <h1>Laudo — ${esc(l.exame)}</h1><div class="texto">${esc(l.texto)}</div>
-    ${(l.imagens || []).length ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">${l.imagens.map((s) => `<img src="${s}" style="width:100%;max-height:260px;object-fit:contain;border:1px solid #ccc">`).join("")}</div>` : ""}
-    <p style="text-align:right;margin-top:20px"><small>${l.dataAbertura ? "Requisição aberta em: " + fmtData(l.dataAbertura) + " · " : ""}${l.solicitante ? "Solicitante: " + esc(l.solicitante) + " · " : ""}Data do laudo: ${l.dataLaudo ? fmtData(l.dataLaudo) : l.liberadoEm?.toDate ? l.liberadoEm.toDate().toLocaleDateString("pt-BR") : new Date().toLocaleDateString("pt-BR")}</small></p>
+  const dtLaudo = l.dataLaudo ? fmtData(l.dataLaudo) : l.liberadoEm?.toDate ? l.liberadoEm.toDate().toLocaleDateString("pt-BR") : new Date().toLocaleDateString("pt-BR");
+  if (fmt !== "a4") return docImpressao(`<div class="cab"><b>${esc(CLINICA.nome)}</b></div><h1>Laudo — ${esc(l.exame)}</h1><p><b>${esc(l.paciente)}</b> · ${esc(l.tutor || "")}</p><div class="texto">${esc(l.texto)}</div><p style="text-align:right"><small>${dtLaudo}</small></p>
     ${assinaturaHtml({ nome: l.profissional, crmv: l.crmv, assinatura: l.assinatura })}`, fmt, `Laudo ${l.exame} - ${l.paciente}`);
+  const pet = [l.especie, l.raca, l.sexo, l.idade, l.peso && l.peso + " kg"].filter(Boolean).join(" · ");
+  const logo = new URL(CLINICA.logoLaudo || "logo-vetplus.png", location.href).href;
+  const corpo = `<div class="topo"></div><div class="lh"><img src="${logo}" alt="" onerror="this.remove()"><div class="tit"><small>LAUDO</small><h1>${esc(l.exame)}${l.regiao ? ` <span style="font-weight:400;font-size:15px">— ${esc(l.regiao)}</span>` : ""}</h1></div></div>
+    <div class="clin">${[esc(CLINICA.nome), CLINICA.cnpj && "CNPJ " + esc(CLINICA.cnpj), esc(CLINICA.endereco || ""), [CLINICA.telefone && "Tel. " + esc(CLINICA.telefone), CLINICA.whatsapp && "WhatsApp " + esc(CLINICA.whatsapp)].filter(Boolean).join(" · ")].filter(Boolean).join(" · ")}</div>
+    <div class="pac"><div><span>Paciente</span><b>${esc(l.paciente)}</b></div><div><span>Tutor</span><b>${esc(l.tutor || "—")}</b></div>
+      ${pet ? `<div style="grid-column:1/3"><span>Espécie · raça · sexo · idade · peso</span><b>${esc(pet)}</b></div>` : ""}
+      <div><span>Médico(a) solicitante</span><b>${esc(l.solicitante || "—")}${l.crmvSolicitante ? " · CRMV " + esc(l.crmvSolicitante) : ""}</b></div><div><span>Requisição aberta em</span><b>${l.dataAbertura ? fmtData(l.dataAbertura) : "—"}</b></div></div>
+    <div class="res">${formatarLaudo(l.texto)}</div>
+    ${(l.imagens || []).length ? `<div class="imgs">${l.imagens.map((s) => `<img src="${s}">`).join("")}</div>` : ""}
+    <div class="datas">Laudo liberado em <b>${dtLaudo}</b></div>
+    ${assinaturaHtml({ nome: l.profissional, crmv: l.crmv, assinatura: l.assinatura })}
+    <div class="rod">${esc(CLINICA.nome)} · ${esc(CLINICA.endereco || "")}<br>Este laudo deve ser interpretado pelo médico veterinário responsável.</div>`;
+  const arq = `Laudo ${l.exame} - ${l.paciente}`.replace(/[\\/:*?"<>|]/g, "");
+  const assunto = encodeURIComponent(`Laudo ${l.exame} — ${l.paciente}`), texto = encodeURIComponent(`Segue o laudo de ${l.exame} do paciente ${l.paciente} (tutor: ${l.tutor || "—"}).\n\nO PDF está anexado.\n\n${CLINICA.nome}`);
+  const barra = `<div class="barra-pdf"><span>Laudo pronto. Baixe o PDF e, se quiser, envie por e-mail.</span><button onclick="baixar()">⬇ Baixar PDF</button><button onclick="window.print()">🖨 Imprimir</button><button onclick="location.href='mailto:${esc(EMAIL_ATENDIMENTO || "")}?subject=${assunto}&body=${texto}'">✉ Enviar por e-mail</button></div>`;
+  const w = window.open("", "_blank");
+  w.document.write(`<html><head><meta charset="utf-8"><title>${esc(arq)}</title><style>@page{size:A4;margin:12mm}${LAUDO_CSS}
+    .ass{margin-top:34px;text-align:center}.ass img{max-height:70px;max-width:220px;display:block;margin:0 auto -8px}.ass.sem{margin-top:22px}.linha{display:inline-block;padding-top:4px;min-width:260px}</style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script></head><body>${barra}<div id="folha">${corpo}</div>
+    <script>function baixar(){ if(!window.html2pdf){ alert('Na janela de impressão escolha "Salvar como PDF".'); return window.print(); }
+      html2pdf().set({margin:[10,8,10,8],filename:${JSON.stringify(arq + ".pdf")},image:{type:"jpeg",quality:.96},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:"mm",format:"a4"}}).from(document.getElementById("folha")).save(); }<\/script></body></html>`);
+  w.document.close();
 }
 async function verLaudo(id) { const d = await getDoc(doc(db, "laudos", id)); if (d.exists()) abrirLaudo(d.data()); }
 function abrirLaudo(l) {
@@ -2754,6 +2829,44 @@ async function telaBuscaExames(v) {
   atualizar();
 }
 
+/* ================= REPASSE OU VENDA (empréstimo/venda de produto do estoque) ================= */
+let filtroRp = { status: "aberto", busca: "" };
+async function telaRepasses(v) {
+  await carregarProdutos();
+  const todos = (await getDocs(query(collection(db, "repasses"), orderBy("criadoEm", "desc")))).docs.map((d) => ({ id: d.id, ...d.data() }));
+  v.innerHTML = `<div class="barra"><h2>Repasse ou venda</h2><button class="btn primary" id="rpNovo">+ Novo repasse / venda</button>
+    <input id="rpB" placeholder="Buscar pessoa, empresa ou produto…" value="${esc(filtroRp.busca)}"><select id="rpS"><option value="aberto">Em aberto (com a pessoa/empresa)</option><option value="todos">Todos</option><option>Devolvido</option><option>Vendido</option></select></div>
+  <p class="muted small">Use quando um produto do estoque sai emprestado ou vendido. Ele é retirado do estoque na hora e fica anotado aqui até a devolução ou a venda ser confirmada.</p>
+  <div class="tabela-wrap"><table><thead><tr><th>Retirado em</th><th>Produto</th><th>Tipo</th><th>Pessoa / empresa</th><th>Quem buscou</th><th>Situação</th><th></th></tr></thead><tbody id="rpTb"></tbody></table></div>`;
+  $("#rpS").value = filtroRp.status;
+  const des = () => { const b = norm(filtroRp.busca), st = filtroRp.status;
+    $("#rpTb").innerHTML = todos.filter((r) => (!b || norm(`${r.destinatario} ${r.produtoNome} ${r.quemBuscou}`).includes(b)) && (st === "todos" || (st === "aberto" ? r.status === "Em aberto" : r.status === st)))
+      .map((r) => `<tr><td class="small">${esc(String(r.retiradoEm || "").replace("T", " ").slice(0, 16))}</td><td><b>${esc(r.produtoNome)}</b><div class="muted small">${esc(r.qtd)} ${esc(r.medida || "")}${r.valor ? " · " + brl(r.valor) : ""}</div></td>
+      <td><span class="tag ${r.tipo === "Venda" ? "ok" : "alerta"}">${esc(r.tipo)}</span></td><td>${esc(r.destinatario)}<div class="muted small">${esc(r.tipoDest || "")}${r.contato ? " · " + esc(r.contato) : ""}</div></td>
+      <td class="small">${esc(r.quemBuscou)}${r.obs ? `<div class="muted">${esc(r.obs)}</div>` : ""}</td><td><span class="tag ${r.status === "Em aberto" ? "alerta" : "ok"}">${esc(r.status)}</span>${r.fechadoEm ? `<div class="muted small">${esc(String(r.fechadoEm).replace("T", " ").slice(0, 16))}</div>` : ""}</td>
+      <td class="acoes-linha">${r.status === "Em aberto" ? `${r.tipo === "Empréstimo" ? `<button class="btn small primary" data-dev="${r.id}">Voltou ao estoque</button>` : ""}<button class="btn small" data-ven="${r.id}">${r.tipo === "Venda" ? "Venda concluída" : "Virou venda"}</button>` : ""}${isMaster() ? `<button class="btn small danger" data-del="${r.id}">Excluir</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="7" class="muted">Nada por aqui.</td></tr>`; };
+  des(); $("#rpB").oninput = (e) => { filtroRp.busca = e.target.value; des(); }; $("#rpS").onchange = (e) => { filtroRp.status = e.target.value; des(); };
+  $("#rpNovo").onclick = () => abrirModal("Novo repasse ou venda", `
+    <label>Produto do estoque<select name="produto" required><option value="">— escolha —</option>${produtos.map((p) => `<option value="${p.id}">${esc(p.nome)}</option>`).join("")}</select></label>
+    <div class="duas"><label>Quantidade<input name="qtd" type="number" min="0.01" step="any" required></label><label>Tipo<select name="tipo"><option>Empréstimo</option><option>Venda</option></select></label></div>
+    <div class="duas"><label>Para<select name="tipoDest"><option>Pessoa</option><option>Empresa</option></select></label><label>Nome da pessoa ou empresa<input name="destinatario" required></label></div>
+    <div class="duas"><label>Contato (telefone)<input name="contato"></label><label>Valor da venda (opcional)<input name="valor" type="number" step="0.01" min="0"></label></div>
+    <label>Quem veio buscar (ex.: motoboy João, Uber, a própria pessoa…)<input name="quemBuscou" required></label>
+    <label>📅 Data e hora da retirada<input type="datetime-local" name="retiradoEm" required value="${agoraLocal()}"></label>
+    <label>Observações<textarea name="obs" rows="2"></textarea></label>`,
+  async (f) => { const p = produtos.find((x) => x.id === f.produto), qtd = Number(f.qtd); let retirados = [];
+    await runTransaction(db, async (t) => { const ref = doc(db, "produtos", p.id), pd = (await t.get(ref)).data(), r = retirarFEFO(pd.lotesEstoque, qtd); retirados = r.retirados; t.update(ref, { lotesEstoque: r.lotes }); });
+    await addDoc(collection(db, "repasses"), JSON.parse(JSON.stringify({ produtoId: p.id, produtoNome: p.nome, medida: p.medida || "", qtd, tipo: f.tipo, tipoDest: f.tipoDest, destinatario: f.destinatario.trim(), contato: f.contato, valor: Number(f.valor) || 0,
+      quemBuscou: f.quemBuscou.trim(), retiradoEm: f.retiradoEm, obs: f.obs, lotes: retirados, status: "Em aberto", criadoPor: usuario.nome, criadoUid: usuario.uid, criadoEm: serverTimestamp() })));
+    await log({ tipo: "repasse", produtoId: p.id, produtoNome: p.nome, qtd, obs: `${f.tipo} para ${f.destinatario}` }); toast("Retirado do estoque e anotado."); render(); }, "Retirar do estoque e anotar");
+  $("#rpTb").onclick = async (e) => { const b = e.target.closest("button"); if (!b) return; const r = todos.find((x) => x.id === (b.dataset.dev || b.dataset.ven || b.dataset.del)); if (!r) return;
+    if (b.dataset.del) { if (confirm("Excluir este registro? O estoque NÃO volta sozinho.")) { await deleteDoc(doc(db, "repasses", r.id)); render(); } return; }
+    if (b.dataset.dev) { if (!confirm(`Confirmar que ${r.qtd} ${r.produtoNome} voltou ao estoque?`)) return;
+      await runTransaction(db, async (t) => { const ref = doc(db, "produtos", r.produtoId), pd = (await t.get(ref)).data(); let lotes = pd.lotesEstoque || []; (r.lotes || []).forEach((x) => (lotes = addLote(lotes, x.qtd, x.validade))); t.update(ref, { lotesEstoque: lotes }); });
+      await updateDoc(doc(db, "repasses", r.id), { status: "Devolvido", fechadoEm: agoraLocal(), fechadoPor: usuario.nome }); await log({ tipo: "repasse", produtoId: r.produtoId, produtoNome: r.produtoNome, qtd: r.qtd, obs: "Devolução de " + r.destinatario }); toast("Voltou ao estoque."); return render(); }
+    if (b.dataset.ven) { if (!confirm("Marcar como vendido (o produto não volta ao estoque)?")) return; await updateDoc(doc(db, "repasses", r.id), { status: "Vendido", tipo: "Venda", fechadoEm: agoraLocal(), fechadoPor: usuario.nome }); toast("Venda registrada."); render(); } };
+}
+
 /* ================= 1.1 NOVA SOLICITAÇÃO (tela própria) ================= */
 async function telaNovaSolicitacao(v) {
   const profs = await carregarProfissionais();
@@ -2774,7 +2887,7 @@ async function telaLaudosPendentes(v) {
   <p class="muted small">Exames de imagem e do LAB VETPLUS entram aqui sozinhos. Libere pelo <b>modelo</b> (texto com assinatura digital) ou <b>anexe o PDF</b> pronto.</p>
   <div class="tabela-wrap"><table><thead><tr><th>Coleta / realização</th><th>Paciente / tutor</th><th>Exame</th><th>Destino</th><th>Solicitante</th><th></th></tr></thead><tbody>
   ${pend.map(({ x, e }, i) => `<tr><td>${e.realizadoEm ? new Date(e.realizadoEm).toLocaleString("pt-BR").slice(0, 17) : "—"}${x.prioridade === "Urgente" ? ` <span class="tag critico">Urgente</span>` : ""}</td>
-    <td><b>${esc(x.paciente)}</b><div class="muted small">${esc(x.tutor)}</div></td><td><b>${esc(e.nome)}</b></td>
+    <td><b>${esc(x.paciente)}</b><div class="muted small">${esc(x.tutor)}</div></td><td><b>${esc(e.nome)}</b>${e.regiao ? `<div class="muted small">${esc(e.regiao)}</div>` : ""}</td>
     <td class="small">${isPrest(e) ? "Imagem" + (e.realizadoPor ? " · " + esc(e.realizadoPor) : "") : esc(e.laboratorio || "")}</td><td>${esc(x.veterinario || "")}</td>
     <td class="acoes-linha"><button class="btn small primary" data-m="${i}">📝 Pelo modelo</button><button class="btn small" data-p="${i}">📎 Anexar PDF</button></td></tr>`).join("") || `<tr><td colspan="6" class="muted">Nenhum laudo pendente. 👍</td></tr>`}</tbody></table></div>`;
   $("#lbNovo").onclick = async () => {
@@ -2815,10 +2928,18 @@ function anexarLaudoPdf({ x, e, k }, profs) {
     if (!pdf && !f.link.trim()) throw new Error("Escolha o PDF ou cole o link.");
     const p = laud.find((p) => p.id === f.prof);
     const ref = await addDoc(collection(db, "laudos"), { exameId: x.id, k, paciente: x.paciente, tutor: x.tutor, exame: e.nome, pdf, pdfLink: f.link.trim(), nomeArquivo: arq?.name || "",
-      profissional: p?.nome || "", crmv: p?.crmv || "", liberadoPor: usuario.nome, liberadoEm: serverTimestamp() });
+      profissional: p?.nome || "", crmv: p?.crmv || "", liberadoPor: usuario.nome, liberadoUid: usuario.uid, liberadoEm: serverTimestamp() });
     await salvarCampo(x.id, k, "laudoId", ref.id); await salvarCampo(x.id, k, "laudo", "SIM");
     toast("Laudo anexado e liberado.");
   }, "Liberar laudo");
+}
+// Só quem liberou o laudo pode editar (as regras do Firestore também garantem isso)
+function editarLaudo(l) {
+  if (l.liberadoUid !== usuario.uid) return toast("Só quem liberou este laudo pode editá-lo.");
+  abrirModal(`Editar laudo — ${l.exame} · ${l.paciente}`, `<div class="duas"><label>Data de abertura da requisição<input type="date" name="dataAbertura" value="${esc(l.dataAbertura || "")}"></label><label>Data da liberação<input type="date" name="dataLaudo" value="${esc(l.dataLaudo || hoje())}"></label></div>
+    <label>Texto do laudo<textarea name="texto" rows="20" style="font-family:monospace">${esc(l.texto || "")}</textarea></label>
+    <p class="muted small">Seu nome, CRMV e assinatura continuam os mesmos. A edição fica registrada.</p>`,
+  async (f) => { await updateDoc(doc(db, "laudos", l.id), { texto: f.texto, dataAbertura: f.dataAbertura, dataLaudo: f.dataLaudo, editadoEm: serverTimestamp(), editadoPor: usuario.nome }); toast("Laudo atualizado."); render(); }, "Salvar alterações");
 }
 async function telaLaudosLiberados(v) {
   const ls = (await getDocs(query(collection(db, "laudos"), orderBy("liberadoEm", "desc")))).docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -2828,9 +2949,10 @@ async function telaLaudosLiberados(v) {
   const des = () => { const b = busca.toLowerCase();
     $("#lbTb").innerHTML = ls.filter((l) => !b || `${l.paciente} ${l.tutor} ${l.exame} ${l.profissional}`.toLowerCase().includes(b)).map((l) => `<tr><td>${fmtTs(l.liberadoEm)}</td>
       <td><b>${esc(l.paciente)}</b><div class="muted small">${esc(l.tutor || "")}</div></td><td>${esc(l.exame)}</td><td>${esc(l.profissional || "")}<div class="muted small">por ${esc(l.liberadoPor || "")}</div></td>
-      <td>${l.pdf || l.pdfLink ? `<span class="tag neutro">PDF</span>` : `<span class="tag ok">Modelo</span>`}</td><td><button class="btn small primary" data-v="${l.id}">Abrir</button></td></tr>`).join("") || `<tr><td colspan="6" class="muted">Nenhum laudo.</td></tr>`; };
+      <td>${l.pdf || l.pdfLink ? `<span class="tag neutro">PDF</span>` : `<span class="tag ok">Modelo</span>`}</td><td class="acoes-linha"><button class="btn small primary" data-v="${l.id}">Abrir</button>${l.liberadoUid === usuario.uid && !(l.pdf || l.pdfLink) ? `<button class="btn small" data-ed="${l.id}">✏️ Editar</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Nenhum laudo.</td></tr>`; };
   des(); $("#lbB").oninput = (e) => { busca = e.target.value; des(); };
-  $("#lbTb").onclick = (e) => { const b = e.target.closest("[data-v]"); if (b) abrirLaudo(ls.find((l) => l.id === b.dataset.v)); };
+  $("#lbTb").onclick = (e) => { const b = e.target.closest("[data-v]"); if (b) return abrirLaudo(ls.find((l) => l.id === b.dataset.v));
+    const ed = e.target.closest("[data-ed]"); if (ed) editarLaudo(ls.find((l) => l.id === ed.dataset.ed)); };
 }
 
 /* ================= 3 · PRODUÇÃO POR MÉDICO, POR SEMANA ================= */
