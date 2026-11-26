@@ -193,7 +193,7 @@ const SETORES = [
   { id: "orcamentos", mod: "ambul", n: "8", titulo: "Orçamentos", icone: "💰", abas: [["orcamentos", "8.1 Histórico de orçamentos"], ["orcamento", "8.2 Novo orçamento"], ["servicos", "8.3 Banco de serviços"], ["pacotes", "Pacotes"]] },
   { id: "time-agenda", mod: "time", n: "", titulo: "Agenda de atividades do time", icone: "📋", abas: [["time-agenda", "Agenda de atividades"]] },
   { id: "time-relatorios", mod: "time", n: "", titulo: "Relatórios e histórico do time", icone: "📑", abas: [["time-relatorios", "Relatórios, avaliações e assinaturas"]] },
-  { id: "time-docs", mod: "time", n: "", titulo: "Documentação", icone: "🗂️", entrevista: true, abas: [["time-docs", "Documentos assinados por colaborador"]] },
+  { id: "time-docs", mod: "time", n: "", titulo: "Documentação", icone: "🗂️", entrevista: true, abas: [["time-docs", "Documentos assinados por colaborador"], ["time-check", "Checklist do funcionário"]] },
   { id: "time-treino", mod: "time", n: "", titulo: "Treinamentos", icone: "🎓", entrevista: true, abas: [["time-treino", "Check-in de treinamentos"]] },
   { id: "time-presenca", mod: "time", n: "", titulo: "Presença do time", icone: "⏱", abas: [["time-presenca", "Registro e espelho de presença"]] },
   { id: "entrevista", mod: "time", n: "", titulo: "Entrevista e descrição de cargo", icone: "🗣️", entrevista: true, abas: [["entrevista", "Entrevistas por tipo de vaga (ficha com o nome do candidato)"], ["time-cargos", "Descrição de cargo (imprimir com o nome)"]] },

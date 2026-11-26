@@ -215,6 +215,10 @@ export function iniciarTime(c) {
   }
   /* ===== DOCUMENTAÇÃO (check de documentos assinados por colaborador) ===== */
   const SUGESTOES_DOCS = [
+    { nome: "Missão, visão e valores da clínica (ciência)", aplica: "todos", descricao: "Recebeu e leu." },
+    { nome: "Código de ética e conduta profissional (ciência)", aplica: "todos", descricao: "" },
+    { nome: "Regulamento interno (ciência)", aplica: "todos", descricao: "Regras de jornada, uniforme, celular, atrasos, sigilo, uso de materiais." },
+    { nome: "Descrição de cargo entregue", aplica: "todos", descricao: "Impressa em Nosso time → Descrição de cargo." },
     { nome: "Termo de confidencialidade e LGPD", aplica: "todos", descricao: "Sigilo de dados de tutores, pacientes e da clínica (Lei nº 13.709/2018)." },
     { nome: "Autorização de uso de imagem", aplica: "todos", descricao: "Fotos e vídeos de pacientes e da equipe para uso da clínica." },
     { nome: "Contrato de trabalho (CLT)", aplica: "clt", descricao: "Contrato assinado; contrato de experiência quando houver." },
@@ -285,6 +289,80 @@ export function iniciarTime(c) {
       $("#ckTodos").onclick = () => $("#modalCorpo").querySelectorAll("[data-p]").forEach((c) => (c.checked = true)); $("#ckNenhum").onclick = () => $("#modalCorpo").querySelectorAll("[data-p]").forEach((c) => (c.checked = false)); };
   }
 
+
+  /* ===== CHECKLIST DO FUNCIONÁRIO ===== */
+  const EPI_ITENS = [["mascara", "Máscara descartável", "livre"], ["luva_proc", "Luvas de procedimento", "livre"], ["luva_limp", "Luvas de limpeza", "livre"], ["avental", "Avental/capote descartável", "eventual"], ["touca", "Touca / propé", "eventual"], ["oculos", "Óculos de proteção", "eventual"], ["auricular", "Protetor auricular", "eventual"], ["chumbo", "Avental/protetor de chumbo (radiação)", "eventual"]];
+  const EXTRAS = [["ficha_epi", "Ficha de EPI assinada (NR-6)"], ["nr32", "Treinamento de biossegurança (NR-32) feito"], ["cartao_vac", "Cópia da carteira de vacinação arquivada"], ["docs_pessoais", "Documentos pessoais arquivados (RG, CPF, comprovante de endereço)"], ["registro", "Registro em carteira / eSocial (CLT) ou contrato + CNPJ (PJ) em dia"], ["vt", "Opção de vale-transporte registrada (CLT)"], ["dosimetro", "Dosímetro entregue (só quem trabalha com radiação)"], ["conselho", "Registro no conselho (CRMV/outro) conferido"]];
+  const TIPOS_MED = ["Admissional", "Periódico", "Retorno ao trabalho", "Mudança de função", "Demissional"];
+  const addM = (s, n) => { const d = dt(s); d.setMonth(d.getMonth() + n); return iso(d); };
+  const venc = (p) => { if (!p) return `<span class="muted small">sem prazo</span>`; const dias = Math.round((dt(p) - dt(hoje())) / 86400000);
+    return dias < 0 ? `<span class="tag alerta" style="background:#fde0e0;color:#a11">VENCIDO ${br(p)}</span>` : dias <= 30 ? `<span class="tag alerta">vence ${br(p)} (${dias}d)</span>` : `<span class="tag ok">próximo ${br(p)}</span>`; };
+  async function telaCheck(v) {
+    const [pes, ass, modelos, chks] = await Promise.all([pessoas(), lista("timeDocAssin"), lista("timeDocModelos"), lista("timeCheck")]);
+    const dados = new Map(chks.map((c) => [c.id, c]));
+    const get = (id) => { if (!dados.has(id)) dados.set(id, { vac: [], med: [], rad: { ativo: false, regs: [] }, epi: {}, email: {}, ext: {} }); const c = dados.get(id); c.vac ||= []; c.med ||= []; c.rad ||= { ativo: false, regs: [] }; c.rad.regs ||= []; c.epi ||= {}; c.email ||= {}; c.ext ||= {}; return c; };
+    const salvar = async (id) => { const c = JSON.parse(JSON.stringify(get(id))); delete c.id; await setDoc(doc(db, "timeCheck", id), c); };
+    const mapa = new Map(ass.map((a) => [a.pessoaId + "_" + a.modeloId, a]));
+    const doPessoa = (p) => modelos.filter((m) => m.ativo !== false && (m.aplica === "todos" || m.aplica === vinculoDe(p))).sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+    let sel = pes[0]?.id, ym = mesAtual();
+    const ultimo = (l) => [...l].sort((a, b) => String(b.data).localeCompare(String(a.data)))[0];
+    const alertas = () => { const r = []; for (const p of pes) { const c = get(p.id); const add = (t, prox) => { if (prox && prox <= addM(hoje(), 1)) r.push([p.nome, t, prox]); };
+      const um = ultimo(c.med); if (um) add("Exame médico", um.prox); if (c.rad.ativo) { const ur = ultimo(c.rad.regs); if (ur) add("Exame de radiação", ur.prox); else r.push([p.nome, "Exame de radiação", ""]); }
+      if (!c.vac.some((x) => String(x.data).startsWith(hoje().slice(0, 4)))) r.push([p.nome, "Vacinação do ano", ""]); if (!um) r.push([p.nome, "Exame médico", ""]); } return r; };
+    v.innerHTML = `<div class="barra"><h2>Checklist do funcionário</h2><select id="ckP">${pes.map((p) => `<option value="${p.id}">${esc(p.nome)}</option>`).join("")}</select></div>
+      <p class="muted small">Prazos são sugestões padrão (12 meses) e podem ser mudados em cada lançamento. Confirme a periodicidade com o médico do trabalho (PCMSO) e o contador.</p>
+      <div id="ckAl"></div><div id="ckCorpo"></div><div id="ckEquipe"></div>`;
+    const des = () => { const p = pes.find((x) => x.id === sel); if (!p) return; const c = get(p.id), clt = vinculoDe(p) === "clt";
+      const al = alertas(); $("#ckAl").innerHTML = `<details class="card"${al.length ? " open" : ""}><summary><b>⚠ Atenção da equipe (${al.length})</b> <span class="muted small">vencidos, a vencer em 30 dias ou sem registro</span></summary>${al.map((a) => `<div class="small">• <b>${esc(a[0])}</b> — ${a[1]} ${a[2] ? venc(a[2]) : `<span class="tag alerta">sem registro</span>`}</div>`).join("") || "<p class='muted small'>Tudo em dia.</p>"}</details>`;
+      const docs = doPessoa(p), nOk = docs.filter((m) => mapa.has(p.id + "_" + m.id)).length;
+      const uv = ultimo(c.vac), anoV = c.vac.some((x) => String(x.data).startsWith(hoje().slice(0, 4)));
+      const um = ultimo(c.med), ur = ultimo(c.rad.regs), epiM = c.epi[ym] || {};
+      $("#ckCorpo").innerHTML = `<div class="card"><h3 style="margin-top:0">${esc(p.nome)} <span class="tag neutro">${APLICA[vinculoDe(p)]}</span></h3>
+      <h4>1. Documentos assinados — ${nOk}/${docs.length}</h4>${barra(docs.length ? Math.round(nOk * 100 / docs.length) : 0)}
+      ${docs.map((m) => { const a = mapa.get(p.id + "_" + m.id); return `<label style="display:flex;gap:8px;align-items:center;padding:4px 0"><input type="checkbox" data-doc="${m.id}" ${a ? "checked" : ""}> ${esc(m.nome)} ${a ? `<span class="muted small">assinado em ${br(a.data)}</span>` : ""}</label>`; }).join("") || `<p class="muted small">Nenhum documento cadastrado. Vá em Documentos assinados → "Carregar documentos sugeridos".</p>`}
+      <h4>2. Vacinação ${anoV ? `<span class="tag ok">✔ feita em ${hoje().slice(0, 4)}</span>` : `<span class="tag alerta">sem vacina registrada em ${hoje().slice(0, 4)}</span>`}</h4>
+      <button class="btn small" id="vAdd">+ Registrar vacina</button>
+      <div class="tabela-wrap"><table><thead><tr><th>Vacina</th><th>Data</th><th>Próxima</th><th></th></tr></thead><tbody>${[...c.vac].sort((a, b) => String(b.data).localeCompare(String(a.data))).map((x) => `<tr><td>${esc(x.n)}</td><td>${br(x.data)}</td><td>${venc(x.prox)}</td><td><button class="btn small danger" data-dv="${x.id}">✕</button></td></tr>`).join("") || `<tr><td colspan="4" class="muted">Nenhuma.</td></tr>`}</tbody></table></div>
+      <p class="muted small">Sugestão para quem trabalha com animais: tétano/difteria (dT), hepatite B, raiva (pré-exposição) e gripe anual — definidas pelo médico do trabalho no PCMSO.</p>
+      <h4>3. EPI do mês <input type="month" id="epiM" value="${ym}" style="width:auto"></h4>
+      <p class="muted small">Toque em + sempre que a pessoa pegar. "Livre" = à vontade (só para saber o consumo); "eventual" = entrega registrada.</p>
+      <div class="tabela-wrap"><table><thead><tr><th>Item</th><th>Tipo</th><th>Neste mês</th><th></th></tr></thead><tbody>${EPI_ITENS.map(([k, n, t]) => `<tr><td>${n}</td><td class="muted small">${t}</td><td><b>${epiM[k] || 0}</b></td><td><button class="btn small" data-epi="${k}" data-d="-1">−</button> <button class="btn small primary" data-epi="${k}" data-d="1">+</button></td></tr>`).join("")}</tbody></table></div>
+      <h4>4. Radiação ${ur ? venc(ur.prox) : ""}</h4>
+      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="radA" ${c.rad.ativo ? "checked" : ""}> Esta pessoa tem contato com radiação (raio-x)</label>
+      ${c.rad.ativo ? `<button class="btn small" id="rAdd">+ Registrar teste/avaliação anual</button><div class="tabela-wrap"><table><thead><tr><th>Data</th><th>Próximo</th><th>Obs.</th><th></th></tr></thead><tbody>${[...c.rad.regs].sort((a, b) => String(b.data).localeCompare(String(a.data))).map((x) => `<tr><td>${br(x.data)}</td><td>${venc(x.prox)}</td><td class="small">${esc(x.obs || "")}</td><td><button class="btn small danger" data-dr="${x.id}">✕</button></td></tr>`).join("") || `<tr><td colspan="4" class="muted">Nenhum.</td></tr>`}</tbody></table></div>` : ""}
+      <h4>5. Exame médico ocupacional ${um ? venc(um.prox) : `<span class="tag alerta">sem registro</span>`}</h4>
+      <button class="btn small" id="mAdd">+ Registrar exame (ASO)</button>
+      <div class="tabela-wrap"><table><thead><tr><th>Tipo</th><th>Data</th><th>Próximo</th><th>Médico/obs.</th><th></th></tr></thead><tbody>${[...c.med].sort((a, b) => String(b.data).localeCompare(String(a.data))).map((x) => `<tr><td>${esc(x.tipo)}</td><td>${br(x.data)}</td><td>${venc(x.prox)}</td><td class="small">${esc(x.obs || "")}</td><td><button class="btn small danger" data-dm="${x.id}">✕</button></td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nenhum.</td></tr>`}</tbody></table></div>
+      <p class="muted small">Pela NR-7 (PCMSO), CLT: exame <b>admissional</b> antes de começar; <b>periódico</b> (em geral a cada 12 meses para quem tem exposição a risco, como biológico/radiação; até 24 meses para os demais, a critério do médico); <b>retorno</b> após afastamento de 30+ dias; <b>mudança de função</b>; <b>demissional</b> (até 10 dias após o desligamento, salvo dispensas da NR-7). Confirme com o médico coordenador do PCMSO.</p>
+      <h4>6. Documentos enviados ao e-mail pessoal ${c.email.data ? `<span class="tag ok">✔ ${br(c.email.data)}</span>` : `<span class="tag alerta">não enviado</span>`}</h4>
+      <div class="duas"><label>E-mail pessoal<input id="emEnd" value="${esc(c.email.end || "")}"></label><label>Data do envio<input type="date" id="emData" value="${c.email.data || ""}"></label></div><button class="btn small" id="emSalvar">Salvar</button>
+      <h4>7. Complementares</h4>
+      ${EXTRAS.map(([k, n]) => `<label style="display:flex;gap:8px;align-items:center;padding:3px 0"><input type="checkbox" data-ex="${k}" ${c.ext[k] ? "checked" : ""}> ${n} ${c.ext[k] ? `<span class="muted small">${br(c.ext[k])}</span>` : ""}</label>`).join("")}
+      <p style="margin-top:12px"><button class="btn" id="ckPrint">🖨 Imprimir checklist</button></p></div>`;
+      // EQUIPE: EPI do mês
+      const tot = {}; for (const q of pes) { const e = (get(q.id).epi || {})[ym] || {}; for (const [k, n] of Object.entries(e)) tot[k] = (tot[k] || 0) + n; }
+      $("#ckEquipe").innerHTML = `<details class="card"><summary><b>Consumo de EPI da equipe em ${ym.split("-").reverse().join("/")}</b></summary><div class="tabela-wrap"><table><thead><tr><th>Item</th><th>Total</th>${pes.map((q) => `<th class="small">${esc(q.nome.split(" ")[0])}</th>`).join("")}</tr></thead><tbody>${EPI_ITENS.map(([k, n]) => `<tr><td>${n}</td><td><b>${tot[k] || 0}</b></td>${pes.map((q) => `<td>${((get(q.id).epi || {})[ym] || {})[k] || 0}</td>`).join("")}</tr>`).join("")}</tbody></table></div></details>`;
+      const sv = async () => { await salvar(sel); des(); };
+      $("#ckCorpo").querySelectorAll("[data-doc]").forEach((cb) => (cb.onchange = async () => { const id = sel + "_" + cb.dataset.doc;
+        if (cb.checked) { const a = { pessoaId: sel, modeloId: cb.dataset.doc, data: hoje(), marcadoPor: eu().nome, marcadoEm: serverTimestamp() }; await setDoc(doc(db, "timeDocAssin", id), a); mapa.set(id, { ...a }); }
+        else { if (!confirm("Desmarcar este documento?")) { cb.checked = true; return; } await deleteDoc(doc(db, "timeDocAssin", id)); mapa.delete(id); } des(); }));
+      $("#ckCorpo").querySelectorAll("[data-ex]").forEach((cb) => (cb.onchange = () => { if (cb.checked) c.ext[cb.dataset.ex] = hoje(); else delete c.ext[cb.dataset.ex]; sv(); }));
+      $("#ckCorpo").querySelectorAll("[data-epi]").forEach((b) => (b.onclick = () => { const e = (c.epi[ym] ||= {}); e[b.dataset.epi] = Math.max(0, (e[b.dataset.epi] || 0) + Number(b.dataset.d)); sv(); }));
+      $("#epiM").onchange = (e) => { ym = e.target.value || mesAtual(); des(); };
+      $("#radA").onchange = (e) => { c.rad.ativo = e.target.checked; sv(); };
+      const rm = (arr, id) => { const i = arr.findIndex((x) => x.id === id); if (i >= 0 && confirm("Remover este registro?")) { arr.splice(i, 1); sv(); } };
+      $("#ckCorpo").querySelectorAll("[data-dv]").forEach((b) => (b.onclick = () => rm(c.vac, b.dataset.dv)));
+      $("#ckCorpo").querySelectorAll("[data-dr]").forEach((b) => (b.onclick = () => rm(c.rad.regs, b.dataset.dr)));
+      $("#ckCorpo").querySelectorAll("[data-dm]").forEach((b) => (b.onclick = () => rm(c.med, b.dataset.dm)));
+      const uid = () => Math.random().toString(36).slice(2, 9);
+      $("#vAdd").onclick = () => abrirModal("Registrar vacina", `<label>Vacina<input name="n" list="vl" required><datalist id="vl"><option>Hepatite B</option><option>Tétano/difteria (dT)</option><option>Raiva (pré-exposição)</option><option>Gripe (influenza)</option></datalist></label><div class="duas"><label>Data<input type="date" name="data" required value="${hoje()}"></label><label>Próxima dose/reforço (opcional)<input type="date" name="prox" value="${addM(hoje(), 12)}"></label></div>`, async (f) => { c.vac.push({ id: uid(), n: f.n.trim(), data: f.data, prox: f.prox || "" }); await sv(); }, "Salvar");
+      $("#mAdd")?.addEventListener("click", () => abrirModal("Registrar exame ocupacional", `<label>Tipo<select name="tipo">${TIPOS_MED.map((t) => `<option>${t}</option>`).join("")}</select></label><div class="duas"><label>Data do exame<input type="date" name="data" required value="${hoje()}"></label><label>Próximo exame (padrão 12 meses)<input type="date" name="prox" value="${addM(hoje(), 12)}"></label></div><label>Médico / observações<input name="obs"></label>`, async (f) => { c.med.push({ id: uid(), tipo: f.tipo, data: f.data, prox: f.prox || "", obs: f.obs }); await sv(); }, "Salvar"));
+      $("#rAdd")?.addEventListener("click", () => abrirModal("Registrar teste de radiação", `<div class="duas"><label>Data<input type="date" name="data" required value="${hoje()}"></label><label>Próximo (padrão 12 meses)<input type="date" name="prox" value="${addM(hoje(), 12)}"></label></div><label>Observações (dosimetria, médico…)<input name="obs"></label>`, async (f) => { c.rad.regs.push({ id: uid(), data: f.data, prox: f.prox || "", obs: f.obs }); await sv(); }, "Salvar"));
+      $("#emSalvar").onclick = () => { c.email = { end: $("#emEnd").value.trim(), data: $("#emData").value }; sv(); toast("Salvo."); };
+      $("#ckPrint").onclick = () => docImpressao(`<h2>Checklist — ${esc(p.nome)}</h2><p>${APLICA[vinculoDe(p)]} · ${br(hoje())}</p><h4>Documentos</h4>${docs.map((m) => `<div>${mapa.has(p.id + "_" + m.id) ? "☑" : "☐"} ${esc(m.nome)}</div>`).join("")}<h4>Vacinação</h4><div>${c.vac.map((x) => `${esc(x.n)}: ${br(x.data)} (próx. ${br(x.prox) || "—"})`).join("<br>") || "—"}</div><h4>Exame médico</h4><div>${c.med.map((x) => `${esc(x.tipo)}: ${br(x.data)} (próx. ${br(x.prox) || "—"})`).join("<br>") || "—"}</div>${c.rad.ativo ? `<h4>Radiação</h4><div>${c.rad.regs.map((x) => `${br(x.data)} (próx. ${br(x.prox) || "—"})`).join("<br>") || "—"}</div>` : ""}<h4>E-mail pessoal</h4><div>${esc(c.email.end || "—")} ${c.email.data ? br(c.email.data) : ""}</div><h4>Complementares</h4>${EXTRAS.map(([k, n]) => `<div>${c.ext[k] ? "☑" : "☐"} ${n}</div>`).join("")}`, "a4", "Checklist"); };
+    des(); $("#ckP").onchange = (e) => { sel = e.target.value; des(); };
+  }
+
   function telaCargos(v) {
     let cur = "auxiliar";
     const html = (d, nome) => htmlDescricao(d, CLINICA_NOME, nome);
@@ -294,5 +372,5 @@ export function iniciarTime(c) {
     $("#cgSel").onchange = (e) => { cur = e.target.value; des(); }; $("#cgNome").oninput = des; $("#cgPrint").onclick = () => docImpressao(html(DESCRICOES[cur], $("#cgNome").value.trim()), "a4", "Descrição de cargo " + DESCRICOES[cur].nome + ($("#cgNome").value ? " - " + $("#cgNome").value : ""), CSS_DESCRICAO);
     des();
   }
-  return { "time-docs": telaDocs, "time-treino": telaTreinos, "time-cargos": telaCargos, "time-agenda": telaAgenda, "time-relatorios": telaRelatorios, "time-presenca": telaPresenca };
+  return { "time-check": telaCheck, "time-docs": telaDocs, "time-treino": telaTreinos, "time-cargos": telaCargos, "time-agenda": telaAgenda, "time-relatorios": telaRelatorios, "time-presenca": telaPresenca };
 }
