@@ -363,6 +363,43 @@ export function iniciarTime(c) {
     des(); $("#ckP").onchange = (e) => { sel = e.target.value; des(); };
   }
 
+  /* ===== DOCUMENTOS DA CLÍNICA (validade e aviso de vencimento) ===== */
+  const SUG_CLINICA = [
+    ["Alvará de funcionamento", "Licenças", 12], ["Licença sanitária (Vigilância Sanitária)", "Licenças", 12], ["Certificado de regularidade no CRMV (empresa) + ART do responsável técnico", "Licenças", 12],
+    ["AVCB / certificado do Corpo de Bombeiros", "Licenças", 12], ["Manutenção/recarga dos extintores", "Segurança", 12],
+    ["PGR — Programa de Gerenciamento de Riscos (NR-1)", "Saúde e segurança", 24], ["PCMSO — Programa de Controle Médico (NR-7)", "Saúde e segurança", 12], ["Laudo de insalubridade / LTCAT", "Saúde e segurança", 12],
+    ["Plano de radioproteção (raio-x)", "Radiação", 48], ["Levantamento radiométrico", "Radiação", 48], ["Teste de controle de qualidade do raio-x", "Radiação", 12], ["Dosímetros — relatório mensal em dia", "Radiação", 1],
+    ["PGRSS — plano de resíduos de saúde", "Resíduos e higiene", 12], ["Contrato/certificado da empresa de coleta de resíduos", "Resíduos e higiene", 12], ["Dedetização / controle de pragas", "Resíduos e higiene", 6], ["Limpeza da caixa d'água", "Resíduos e higiene", 6],
+    ["Calibração/manutenção da autoclave", "Equipamentos", 12], ["Manutenção de equipamentos (ultrassom, monitor, anestesia)", "Equipamentos", 12], ["Seguro da clínica", "Outros", 12]];
+  async function telaClinica(v) {
+    let docs = await lista("clinicaDocs"), fil = "";
+    const dias = (p) => Math.round((dt(p) - dt(hoje())) / 86400000);
+    const des = () => { docs.sort((a, b) => String(a.validade || "9999").localeCompare(String(b.validade || "9999")));
+      const l = docs.filter((d) => !fil || (fil === "venc" ? d.validade && dias(d.validade) <= 30 : fil === "sem" ? !d.validade : d.categoria === fil));
+      const nv = docs.filter((d) => d.validade && dias(d.validade) < 0).length, na = docs.filter((d) => d.validade && dias(d.validade) >= 0 && dias(d.validade) <= 30).length, ns = docs.filter((d) => !d.validade).length;
+      const cats = [...new Set(docs.map((d) => d.categoria).filter(Boolean))];
+      $("#clRes").innerHTML = `<span class="tag alerta" style="background:#fde0e0;color:#a11">${nv} vencido(s)</span> <span class="tag alerta">${na} vencem em 30 dias</span> <span class="tag neutro">${ns} sem data</span> <span class="tag ok">${docs.length - nv - na - ns} em dia</span>`;
+      $("#clFil").innerHTML = `<option value="">Todos</option><option value="venc">Vencidos / a vencer (30 dias)</option><option value="sem">Sem data</option>${cats.map((c) => `<option>${esc(c)}</option>`).join("")}`; $("#clFil").value = fil;
+      $("#clTb").innerHTML = l.map((d) => `<tr><td><b>${esc(d.nome)}</b>${d.obs ? `<div class="muted small">${esc(d.obs)}</div>` : ""}</td><td class="small">${esc(d.categoria || "")}</td><td class="small">${esc(d.responsavel || "—")}</td><td>${d.emissao ? br(d.emissao) : "—"}</td><td>${venc(d.validade)}</td><td class="small">${d.meses ? d.meses + " m" : ""}</td>
+        <td class="acoes-linha">${d.link ? `<a class="btn small" href="${esc(d.link)}" target="_blank">Abrir</a>` : ""}<button class="btn small primary" data-r="${d.id}">Renovar</button><button class="btn small" data-e="${d.id}">Editar</button><button class="btn small danger" data-x="${d.id}">✕</button></td></tr>`).join("") || `<tr><td colspan="7" class="muted">Nenhum documento. Use "Carregar sugestões".</td></tr>`; };
+    v.innerHTML = `<div class="barra"><h2>Documentos da clínica</h2><select id="clFil"></select><button class="btn primary" id="clNovo">+ Novo documento</button><button class="btn small" id="clSug">Carregar sugestões</button></div><div id="clRes" style="margin:6px 0"></div>
+      <p class="muted small">Cadastre a validade de cada licença/programa. Os vencidos e os que vencem em 30 dias aparecem em vermelho/amarelo. As sugestões e prazos são um ponto de partida: confirme com contador, Vigilância Sanitária e engenheiro de segurança.</p>
+      <div class="tabela-wrap"><table><thead><tr><th>Documento</th><th>Tipo</th><th>Responsável</th><th>Emitido</th><th>Validade</th><th>Ciclo</th><th></th></tr></thead><tbody id="clTb"></tbody></table></div>`;
+    const recarregar = async () => { docs = await lista("clinicaDocs"); des(); };
+    const form = (d) => abrirModal(d ? "Editar documento" : "Novo documento", `<label>Nome<input name="nome" required value="${esc(d?.nome || "")}"></label><div class="duas"><label>Tipo<input name="categoria" value="${esc(d?.categoria || "")}"></label><label>Responsável / órgão<input name="responsavel" value="${esc(d?.responsavel || "")}"></label></div>
+      <div class="duas"><label>Data de emissão<input type="date" name="emissao" value="${d?.emissao || ""}"></label><label>Validade (vencimento)<input type="date" name="validade" value="${d?.validade || ""}"></label></div>
+      <label>Ciclo de renovação (meses)<input type="number" min="0" name="meses" value="${d?.meses || ""}"></label><label>Link (Drive)<input name="link" value="${esc(d?.link || "")}"></label><label>Observações<textarea name="obs" rows="2">${esc(d?.obs || "")}</textarea></label>`,
+      async (f) => { const x = { nome: f.nome.trim(), categoria: f.categoria, responsavel: f.responsavel, emissao: f.emissao, validade: f.validade, meses: Number(f.meses) || 0, link: f.link, obs: f.obs }; if (d) await updateDoc(doc(db, "clinicaDocs", d.id), x); else await addDoc(collection(db, "clinicaDocs"), x); await recarregar(); });
+    $("#clNovo").onclick = () => form(null); $("#clFil").onchange = (e) => { fil = e.target.value; des(); };
+    $("#clSug").onclick = async () => { const tem = new Set(docs.map((d) => d.nome)); const n = SUG_CLINICA.filter((x) => !tem.has(x[0])); if (!n.length) return toast("Já carregado."); for (const [nome, categoria, meses] of n) await addDoc(collection(db, "clinicaDocs"), { nome, categoria, meses, responsavel: "", emissao: "", validade: "", link: "", obs: "" }); toast(n.length + " documentos adicionados. Preencha as validades."); recarregar(); };
+    $("#clTb").onclick = async (e) => { const b = e.target.closest("button"); if (!b) return; const d = docs.find((x) => x.id === (b.dataset.r || b.dataset.e || b.dataset.x)); if (!d) return;
+      if (b.dataset.e) return form(d);
+      if (b.dataset.x) { if (confirm("Excluir este documento?")) { await deleteDoc(doc(db, "clinicaDocs", d.id)); recarregar(); } return; }
+      abrirModal("Renovar — " + d.nome, `<div class="duas"><label>Nova emissão<input type="date" name="emissao" required value="${hoje()}"></label><label>Nova validade<input type="date" name="validade" id="rnV" value="${d.meses ? addM(hoje(), d.meses) : ""}"></label></div><p class="muted small">Se o ciclo estiver preenchido, a validade sugerida é a emissão + ${d.meses || "?"} meses. Pode ajustar.</p>`,
+        async (f) => { await updateDoc(doc(db, "clinicaDocs", d.id), { emissao: f.emissao, validade: f.validade }); await recarregar(); }, "Renovar"); };
+    des();
+  }
+
   function telaCargos(v) {
     let cur = "auxiliar";
     const html = (d, nome) => htmlDescricao(d, CLINICA_NOME, nome);
@@ -372,5 +409,5 @@ export function iniciarTime(c) {
     $("#cgSel").onchange = (e) => { cur = e.target.value; des(); }; $("#cgNome").oninput = des; $("#cgPrint").onclick = () => docImpressao(html(DESCRICOES[cur], $("#cgNome").value.trim()), "a4", "Descrição de cargo " + DESCRICOES[cur].nome + ($("#cgNome").value ? " - " + $("#cgNome").value : ""), CSS_DESCRICAO);
     des();
   }
-  return { "time-check": telaCheck, "time-docs": telaDocs, "time-treino": telaTreinos, "time-cargos": telaCargos, "time-agenda": telaAgenda, "time-relatorios": telaRelatorios, "time-presenca": telaPresenca };
+  return { "time-clinica": telaClinica, "time-check": telaCheck, "time-docs": telaDocs, "time-treino": telaTreinos, "time-cargos": telaCargos, "time-agenda": telaAgenda, "time-relatorios": telaRelatorios, "time-presenca": telaPresenca };
 }
