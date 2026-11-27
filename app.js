@@ -39,6 +39,7 @@ const proxValidade = (lotes = []) => lotes.filter((l) => l.qtd > 0).map((l) => l
 const nomeSala = (id) => SALAS.find((s) => s.id === id)?.nome || id;
 const isMaster = () => usuario?.role === "master";
 const podeConfirmar = () => ["master", "estoquista"].includes(usuario?.role);
+const podeGerente = () => isMaster() || usuario?.cargo === "gerente";
 const fotoSrc = (p) => p.foto || p.fotoUrl || "";
 const fotoTag = (p) => fotoSrc(p) ? `<img class="foto" src="${esc(fotoSrc(p))}" loading="lazy" onerror="this.replaceWith(document.createElement('div'));">` : `<div class="foto"></div>`;
 const googleImg = (q) => `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(q)}`;
