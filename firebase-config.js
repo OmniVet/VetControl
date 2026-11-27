@@ -21,6 +21,7 @@ export const DISTRIBUIDORAS = [
   "Distribuidora Odontológica",
   "Especiais e Oncológicos",
   "Distribuidora de Medicamentos Especiais",
+  "Insumos Especiais (Medwell)",
   "Limpeza e Escritório",
   "Outros Custos"
 ];
