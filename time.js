@@ -1,7 +1,7 @@
 // "Nosso time": agenda de atividades, relatórios/avaliações (só master) e presença (ponto).
 // Recebe do app.js as ferramentas prontas (banco, janelas, impressão…) para não repetir código.
 import { ROTINAS } from "./rotinas.js";
-import { htmlDescricao, CSS_DESCRICAO, NOTAS, LEGENDA, FAIXAS, faixaDe, pctDe, fichaDoCargo, NOME_FICHA, PERGUNTAS_AVALIADO, DESCRICOES } from "./cargos-rh.js";
+import { formDadosDescricao, lerDadosDescricao, htmlDescricao, CSS_DESCRICAO, NOTAS, LEGENDA, FAIXAS, faixaDe, pctDe, fichaDoCargo, NOME_FICHA, PERGUNTAS_AVALIADO, DESCRICOES } from "./cargos-rh.js";
 export function iniciarTime(c) {
   const { db, fb, $, esc, toast, abrirModal, opts, hoje, eu, isMaster, docImpressao, sha256, entrarComSenha, CRITERIOS, CLINICA_NOME, cltDe } = c;
   const { collection, doc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, serverTimestamp } = fb;
@@ -417,7 +417,7 @@ export function iniciarTime(c) {
     const des = () => { v.querySelector("#cgDoc").innerHTML = html(DESCRICOES[cur], $("#cgNome").value.trim()); };
     v.innerHTML = `<div class="barra"><h2>Descrições de cargo</h2><select id="cgSel">${Object.entries(DESCRICOES).map(([id, d]) => `<option value="${id}">${esc(d.nome)}</option>`).join("")}</select><input id="cgNome" placeholder="Nome do(a) empregado(a) ou candidato(a)" style="min-width:260px"><button class="btn primary" id="cgPrint">🖨 Imprimir / salvar PDF</button></div>
       <p class="muted small">Textos em <code>cargos-rh.js</code>. Itens como CBO, jornada e insalubridade devem ser conferidos com o contador ou advogado trabalhista antes de assinar.</p><div class="card" id="cgDoc" style="font-size:13px"></div>`;
-    $("#cgSel").onchange = (e) => { cur = e.target.value; des(); }; $("#cgNome").oninput = des; $("#cgPrint").onclick = () => docImpressao(html(DESCRICOES[cur], $("#cgNome").value.trim()), "a4", "Descrição de cargo " + DESCRICOES[cur].nome + ($("#cgNome").value ? " - " + $("#cgNome").value : ""), CSS_DESCRICAO);
+    $("#cgSel").onchange = (e) => { cur = e.target.value; des(); }; $("#cgNome").oninput = des; $("#cgPrint").onclick = () => abrirModal("Dados para imprimir a descrição de cargo", formDadosDescricao($("#cgNome").value.trim()), (f) => { const dd = lerDadosDescricao(f); docImpressao(htmlDescricao(DESCRICOES[cur], CLINICA_NOME, dd.nome, dd), "a4", "Descrição de cargo " + DESCRICOES[cur].nome + " - " + dd.nome, CSS_DESCRICAO); }, "Imprimir");
     des();
   }
   return { "time-clinica": telaClinica, "time-check": telaCheck, "time-docs": telaDocs, "time-treino": telaTreinos, "time-cargos": telaCargos, "time-agenda": telaAgenda, "time-relatorios": telaRelatorios, "time-presenca": telaPresenca };

@@ -1,4 +1,4 @@
-import { DESCRICOES, htmlDescricao, CSS_DESCRICAO, CARGO_DA_VAGA } from "./cargos-rh.js";
+import { DESCRICOES, htmlDescricao, formDadosDescricao, lerDadosDescricao, CSS_DESCRICAO, CARGO_DA_VAGA } from "./cargos-rh.js";
 // Módulo "Entrevista": só Master e Gerente. Fichas de entrevista por tipo de vaga, com perguntas, comentários e sinais (+/−) para o balanço final.
 const GERAIS = [
   "Qual a sua experiência na área?",
@@ -57,7 +57,7 @@ export function iniciarEntrevista(c) {
       $("#eVolta").onclick = inicio; $("#eNova").onclick = () => ficha(k, null);
       v.querySelectorAll("[data-v]").forEach((b) => (b.onclick = () => ficha(k, itens.find((x) => x.id === b.dataset.v))));
       v.querySelectorAll("[data-i]").forEach((b) => (b.onclick = () => imprimir(k, itens.find((x) => x.id === b.dataset.i))));
-      v.querySelectorAll("[data-dc]").forEach((b) => (b.onclick = () => { const x = itens.find((y) => y.id === b.dataset.dc); docImpressao(htmlDescricao(DESCRICOES[CARGO_DA_VAGA[k.id]], CLINICA_NOME, x.nome), "a4", "Descrição de cargo - " + x.nome, CSS_DESCRICAO); }));
+      v.querySelectorAll("[data-dc]").forEach((b) => (b.onclick = () => { const x = itens.find((y) => y.id === b.dataset.dc); abrirModal("Dados para imprimir a descrição de cargo", formDadosDescricao(x.nome), (f) => { const dd = lerDadosDescricao(f); docImpressao(htmlDescricao(DESCRICOES[CARGO_DA_VAGA[k.id]], CLINICA_NOME, dd.nome, dd), "a4", "Descrição de cargo - " + dd.nome, CSS_DESCRICAO); }, "Imprimir"); }));
       v.querySelectorAll("[data-x]").forEach((b) => (b.onclick = async () => { if (confirm("Excluir esta entrevista? Não dá para desfazer.")) { await deleteDoc(doc(db, "entrevistas", b.dataset.x)); toast("Entrevista excluída."); tela(v); } }));
     };
     function ficha(k, e) {
