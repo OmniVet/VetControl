@@ -1,7 +1,7 @@
 // Lê a planilha "Controle_Estoque_e_Patrimonio.xlsx" da clínica (uma aba por categoria) e transforma em dados do sistema.
 // Entrada: { "Nome da aba": [[cabeçalho...], [linha...], ...] }. Não grava nada: só devolve o que será importado.
-const ABAS_PRODUTO = ["Hospitalar Humano", "Veterinário", "Distribuidora Odontológica", "Especiais e Oncológicos", "Distribuidora de Medicamentos Especiais", "Limpeza e Escritório", "Outros Custos"];
-const ABAS_OPCIONAIS = ["Distribuidora de Medicamentos Especiais"]; // só avisa se faltar nas demais
+const ABAS_PRODUTO = ["Hospitalar Humano", "Veterinário", "Distribuidora Odontológica", "Especiais e Oncológicos", "Distribuidora de Medicamentos Especiais", "Insumos Especiais (Medwell)", "Limpeza e Escritório", "Outros Custos"];
+const ABAS_OPCIONAIS = ["Distribuidora de Medicamentos Especiais", "Insumos Especiais (Medwell)"]; // só avisa se faltar nas demais
 export const COLUNAS_MODELO = ["Código", "Tipo", "Subcategoria", "Nome comercial", "Princípio ativo", "Espécie indicada", "Marca / Fabricante", "Apresentação", "Concentração / Calibre", "Volume / Conteúdo", "Unidade", "Qtd. em estoque", "Estoque mínimo", "Estoque ideal", "Validade", "Lote (opcional)", "Localização", "Observações"];
 export const COLUNAS_SALAS = ["Sala", "Código", "Produto", "Ideal na sala", "Crítico (repor quando ≤)", "Categoria", "Unidade", "Controlado", "Observações", "Qtd. atual na sala"];
 // O Excel limita o nome da aba a 31 letras: "Medicamentos Especiais" vale como "Distribuidora de Medicamentos Especiais".
