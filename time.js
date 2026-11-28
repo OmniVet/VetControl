@@ -1,6 +1,7 @@
 // "Nosso time": agenda de atividades, relatórios/avaliações (só master) e presença (ponto).
 // Recebe do app.js as ferramentas prontas (banco, janelas, impressão…) para não repetir código.
-import { htmlDescricao, CSS_DESCRICAO, NOTAS, LEGENDA, FAIXAS, faixaDe, pctDe, fichaDoCargo, NOME_FICHA, PERGUNTAS_AVALIADO, DESCRICOES } from "./cargos-rh.js";
+import { ROTINAS } from "./rotinas.js";
+import { formDadosDescricao, lerDadosDescricao, htmlDescricao, CSS_DESCRICAO, NOTAS, LEGENDA, FAIXAS, faixaDe, pctDe, fichaDoCargo, NOME_FICHA, PERGUNTAS_AVALIADO, DESCRICOES } from "./cargos-rh.js";
 export function iniciarTime(c) {
   const { db, fb, $, esc, toast, abrirModal, opts, hoje, eu, isMaster, docImpressao, sha256, entrarComSenha, CRITERIOS, CLINICA_NOME, cltDe } = c;
   const { collection, doc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, serverTimestamp } = fb;
@@ -23,7 +24,7 @@ export function iniciarTime(c) {
   function stats(ats, feitas, pid, ini, fim) {
     const minhas = ats.filter((a) => a.pessoaId === pid && a.ativo !== false); let plan = 0, feito = 0; const falt = {};
     for (const d of intervalo(ini, fim)) { if (d > hoje()) break; const w = dt(d).getDay();
-      for (const a of minhas) { if (!(a.dias || []).includes(w)) continue; plan++; if (feitas.has(a.id + "_" + d)) feito++; else (falt[a.id] ||= { titulo: a.titulo, vezes: 0 }).vezes++; } }
+      for (const a of minhas) { if (!((a.dias || []).includes(w) || (a.diaMes && a.diaMes === dt(d).getDate()))) continue; plan++; if (feitas.has(a.id + "_" + d)) feito++; else (falt[a.id] ||= { titulo: a.titulo, vezes: 0 }).vezes++; } }
     return { plan, feito, pct: plan ? Math.round((feito * 100) / plan) : 0, falt: Object.values(falt) };
   }
   const barra = (p) => `<div class="barra-pct"><div style="width:${p}%"></div></div>`;
@@ -34,12 +35,12 @@ export function iniciarTime(c) {
     let pid = pes.some((p) => p.id === sessionStorage.getItem("timePessoa")) ? sessionStorage.getItem("timePessoa") : me.uid, sem = segunda(hoje()), dia = hoje();
     v.innerHTML = `<div class="barra"><h2>Agenda de atividades do time</h2>
       <select id="tgP">${opts(pes.map((p) => ({ id: p.id, nome: p.nome + (p.id === me.uid ? " (eu)" : "") })), pid)}</select>
-      ${isMaster() ? `<button class="btn primary" id="tgNova">+ Nova atividade</button>` : ""}</div>
+      ${isMaster() ? `<button class="btn primary" id="tgNova">+ Nova atividade</button><button class="btn small" id="tgRot">Carregar rotinas dos cargos</button>` : ""}</div><div id="tgAtraso"></div>
       <p class="muted small">Todos podem ver a rotina dos colegas. Cada pessoa marca as próprias atividades como concluídas; o sistema soma a porcentagem da semana.</p><div id="tgCorpo"></div>`;
     const desenhar = async () => {
       const fimSem = mais(sem, 6), feitas = await concluidas(sem, fimSem), st = stats(ats, feitas, pid, sem, fimSem);
       const minhas = ats.filter((a) => a.pessoaId === pid), wd = dt(dia).getDay();
-      const doDia = minhas.filter((a) => a.ativo !== false && (a.dias || []).includes(wd)).sort((a, b) => String(a.horaIni || "99").localeCompare(String(b.horaIni || "99")));
+      const doDia = minhas.filter((a) => a.ativo !== false && ((a.dias || []).includes(wd) || (a.diaMes && a.diaMes === dt(dia).getDate()))).sort((a, b) => String(a.horaIni || "99").localeCompare(String(b.horaIni || "99")));
       const pode = (pid === me.uid || isMaster()) && dia <= hoje();
       $("#tgCorpo").innerHTML = `<div class="card"><div class="barra" style="margin:0"><button class="btn small" id="tgAnt">◀</button><b>Semana de ${br(sem)} a ${br(fimSem)}</b><button class="btn small" id="tgPro">▶</button>
         <span style="margin-left:auto"><b>${st.pct}%</b> concluído (${st.feito} de ${st.plan} até hoje)</span></div>${barra(st.pct)}
@@ -48,7 +49,7 @@ export function iniciarTime(c) {
           <span class="hora">${esc(a.horaIni || "")}${a.horaFim ? "–" + esc(a.horaFim) : ""}${a.horaIni ? "" : "—"}</span><span style="flex:1"><b>${esc(a.titulo)}</b>${a.obs ? `<div class="small muted">${esc(a.obs)}</div>` : ""}</span>
           ${pode ? `<button class="btn small ${ok ? "" : "primary"}" data-c="${a.id}">${ok ? "✔ Feito (desfazer)" : "Concluir"}</button>` : ok ? "✔" : ""}</div>`; }).join("") : `<p class="muted">Nenhuma atividade neste dia.</p>`}</div>
         ${isMaster() ? `<h3>Grade completa</h3><table><thead><tr><th>Atividade</th><th>Horário</th><th>Dias</th><th></th></tr></thead><tbody>${minhas.map((a) => `<tr class="${a.ativo === false ? "muted" : ""}"><td>${esc(a.titulo)}</td><td>${esc(a.horaIni || "—")}${a.horaFim ? "–" + esc(a.horaFim) : ""}</td>
-          <td>${(a.dias || []).map((d) => DIAS[d]).join(", ")}</td><td class="acoes-linha"><button class="btn small" data-e="${a.id}">Editar</button><button class="btn small" data-x="${a.id}">${a.ativo === false ? "Reativar" : "Desativar"}</button></td></tr>`).join("") || `<tr><td colspan="4" class="muted">Sem atividades cadastradas para esta pessoa.</td></tr>`}</tbody></table>` : ""}`;
+          <td>${a.diaMes ? "todo dia " + a.diaMes : (a.dias || []).map((d) => DIAS[d]).join(", ")}</td><td class="acoes-linha"><button class="btn small" data-e="${a.id}">Editar</button><button class="btn small" data-x="${a.id}">${a.ativo === false ? "Reativar" : "Desativar"}</button></td></tr>`).join("") || `<tr><td colspan="4" class="muted">Sem atividades cadastradas para esta pessoa.</td></tr>`}</tbody></table>` : ""}`;
     };
     const modal = (a = {}) => abrirModal(a.id ? "Editar atividade" : "Nova atividade", `<label>Pessoa<select name="pessoaId">${opts(pes, a.pessoaId || pid)}</select></label>
       <label>Atividade<input name="titulo" required value="${esc(a.titulo || "")}"></label>
@@ -61,6 +62,16 @@ export function iniciarTime(c) {
     });
     $("#tgP").onchange = (e) => { pid = e.target.value; sessionStorage.setItem("timePessoa", pid); desenhar(); };
     $("#tgNova") && ($("#tgNova").onclick = () => modal());
+    $("#tgRot") && ($("#tgRot").onclick = async () => { let n = 0, sem = [];
+      for (const [cargo, lst] of Object.entries(ROTINAS)) { const gente = pes.filter((p) => p.cargo === cargo); if (!gente.length) { sem.push(cargo); continue; }
+        for (const p of gente) for (const r of lst) { if (ats.some((a) => a.pessoaId === p.id && a.titulo === r.titulo)) continue;
+          await addDoc(collection(db, "timeAtividades"), { pessoaId: p.id, pessoaNome: p.nome, titulo: r.titulo, horaIni: r.horaIni || "", horaFim: r.horaFim || "", dias: r.dias || [], diaMes: r.diaMes || 0, obs: r.obs || "", ativo: true, criadoPor: me.nome, criadoEm: serverTimestamp() }); n++; } }
+      toast(`${n} atividades criadas.${sem.length ? " Sem ninguém com o cargo: " + sem.join(", ") + " (defina o cargo em Usuários)." : ""}`); telaAgenda(v); });
+    (async () => { const L = []; const h = hoje();
+      try { (await lista("repasses", where("status", "==", "Em aberto"))).forEach((r) => { if (r.prazo && r.prazo <= mais(h, 3)) L.push([r.prazo, `${r.tipo}: ${r.produtoNome} com ${r.destinatario} — ${(r.prazoTipo || "devolver").toLowerCase()} até ${br(r.prazo)}`]); }); } catch (e) {}
+      try { if (isMaster() || me.cargo === "gerente") (await lista("clinicaDocs")).forEach((d) => { if (d.validade && d.validade <= mais(h, 30)) L.push([d.validade, `Documento da clínica: ${d.nome} — vence ${br(d.validade)}`]); }); } catch (e) {}
+      L.sort(); if (!L.length) return;
+      $("#tgAtraso").innerHTML = `<div class="card" style="border:2px solid #d98a00"><b>⏰ Atrasados e próximos do prazo</b>${L.map(([d, tx]) => `<div class="small">${d < h ? `<span class="tag alerta" style="background:#fde0e0;color:#a11">ATRASADO</span>` : `<span class="tag alerta">em breve</span>`} ${esc(tx)}</div>`).join("")}</div>`; })();
     $("#tgCorpo").onclick = async (e) => {
       const b = e.target.closest("button"); if (!b) return;
       if (b.id === "tgAnt") { sem = mais(sem, -7); dia = sem; return desenhar(); }
@@ -406,7 +417,7 @@ export function iniciarTime(c) {
     const des = () => { v.querySelector("#cgDoc").innerHTML = html(DESCRICOES[cur], $("#cgNome").value.trim()); };
     v.innerHTML = `<div class="barra"><h2>Descrições de cargo</h2><select id="cgSel">${Object.entries(DESCRICOES).map(([id, d]) => `<option value="${id}">${esc(d.nome)}</option>`).join("")}</select><input id="cgNome" placeholder="Nome do(a) empregado(a) ou candidato(a)" style="min-width:260px"><button class="btn primary" id="cgPrint">🖨 Imprimir / salvar PDF</button></div>
       <p class="muted small">Textos em <code>cargos-rh.js</code>. Itens como CBO, jornada e insalubridade devem ser conferidos com o contador ou advogado trabalhista antes de assinar.</p><div class="card" id="cgDoc" style="font-size:13px"></div>`;
-    $("#cgSel").onchange = (e) => { cur = e.target.value; des(); }; $("#cgNome").oninput = des; $("#cgPrint").onclick = () => docImpressao(html(DESCRICOES[cur], $("#cgNome").value.trim()), "a4", "Descrição de cargo " + DESCRICOES[cur].nome + ($("#cgNome").value ? " - " + $("#cgNome").value : ""), CSS_DESCRICAO);
+    $("#cgSel").onchange = (e) => { cur = e.target.value; des(); }; $("#cgNome").oninput = des; $("#cgPrint").onclick = () => abrirModal("Dados para imprimir a descrição de cargo", formDadosDescricao($("#cgNome").value.trim()), (f) => { const dd = lerDadosDescricao(f); docImpressao(htmlDescricao(DESCRICOES[cur], CLINICA_NOME, dd.nome, dd), "a4", "Descrição de cargo " + DESCRICOES[cur].nome + " - " + dd.nome, CSS_DESCRICAO); }, "Imprimir");
     des();
   }
   return { "time-clinica": telaClinica, "time-check": telaCheck, "time-docs": telaDocs, "time-treino": telaTreinos, "time-cargos": telaCargos, "time-agenda": telaAgenda, "time-relatorios": telaRelatorios, "time-presenca": telaPresenca };
