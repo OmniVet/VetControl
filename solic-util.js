@@ -18,7 +18,7 @@ export function lerCatalogo(texto) {
 
 export const prazoDe = (e, prest) => e.prazo || (prest ? "até 72h úteis" : "a confirmar");
 
-export const COR_TUBO = { roxo: ["Roxo (EDTA)", "#a78bd4"], vermelho: ["Vermelho (soro)", "#d4473b"], cinza: ["Cinza (fluoreto)", "#8d979b"], azul: ["Azul (citrato)", "#4f8fd6"], outro: ["Outro recipiente", "#c9a063"] };
+export const COR_TUBO = { roxo: ["Roxo (EDTA)", "#a78bd4"], vermelho: ["Vermelho (soro)", "#d4473b"], cinza: ["Cinza (fluoreto)", "#8d979b"], azul: ["Azul (citrato)", "#4f8fd6"], outro: ["Coletor universal / outro recipiente", "#c9a063"] };
 const lista = (a) => (a.length <= 2 ? a.join(" e ") : a.slice(0, 2).join(", ") + " e outros");
 // Tubos por laboratório: laboratórios diferentes nunca dividem tubo. Vermelho = 1 a cada 10 análises de soro.
 export function tubosPorLab(itens) {

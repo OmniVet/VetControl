@@ -1239,7 +1239,11 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
   const listaImg = [...porExame.values()].sort((p, q) => p.nome.localeCompare(q.nome, "pt")).map((g) => ({ id: "img|" + g.nome, catId: slugId(g.nome, "imagem"), nome: g.nome, grupo: "Imagem", realizadoPor: "", tipo: "", profs: g.profs }))
     .concat([...imgBase.values()].filter((n) => !porExame.has(norm(n))).map((n) => { const c0 = cat.find((c) => isPrest(c) && norm(c.nome) === norm(n)) || {}; return { ...c0, id: "img|" + n, catId: c0.id || slugId(n, "imagem"), nome: n, grupo: "Imagem", realizadoPor: "", tipo: "", profs: [] }; }));
   const listaVP = LAB_VETPLUS.map((t) => ({ id: "vp|" + t.codigo, catId: slugId(t.nome, "vetplus"), nome: t.nome, laboratorio: "VETPLUS", categoria: t.categoria, tipo: "individual", grupo: "Laboratorial", valor: t.valor, tubos: null, analitos: 0, prazo: "feito na clínica", composicao: [] }));
-  const lista = [...cat.filter((c) => !isPrest(c)), ...listaVP, ...listaImg];
+  // Exames avulsos aparecem UMA vez (ex.: ALT); o laboratório é escolhido na hora. Perfis/painéis continuam por laboratório, com a composição completa.
+  const avulsos = [...cat.filter((c) => !isPrest(c) && c.tipo === "individual"), ...listaVP], gmap = new Map();
+  avulsos.forEach((c) => { const k = chave(c.nome); if (!gmap.has(k)) gmap.set(k, { id: "g|" + k, catId: "g|" + k, nome: c.nome, grupo: "Laboratorial", tipo: "individual", categoria: c.categoria, variantes: [], composicao: [] }); gmap.get(k).variantes.push(c); });
+  const listaAvulsos = [...gmap.values()].map((g) => ({ ...g, variantes: g.variantes.sort((p, q) => String(p.laboratorio).localeCompare(q.laboratorio)) })).sort((p, q) => p.nome.localeCompare(q.nome, "pt"));
+  const lista = [...listaAvulsos, ...cat.filter((c) => !isPrest(c) && c.tipo !== "individual").sort((p, q) => p.nome.localeCompare(q.nome, "pt")), ...listaImg];
   let modoAdd = null, pend = null, tipoReq = "Laboratorial";
   const pag0 = itens[0] ? { pagamento: itens[0].pagamento, convenio: itens[0].convenio } : { pagamento: "Particular", convenio: "" };
   const nomesProf = [...new Set([...EXECUTORES_IMAGEM, ...IMAGEM_TABELA.map((t) => t.profissional), ...profs.map((p) => p.nome)])], vetIni = x.veterinario || meuProfissional(profs)?.nome || "";
@@ -1304,7 +1308,10 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
       <td><button type="button" class="btn small danger" data-rmk="${k}">✕</button></td></tr>
       ${ehPA(e) ? `<tr data-pa="${k}"><td colspan="6"><b>Aferições de pressão arterial sistólica (mmHg)</b> <span class="muted small">até 5 valores — vão para o laudo</span><div class="duas5">${[0, 1, 2, 3, 4].map((j) => `<input type="number" min="0" placeholder="${j + 1}ª" value="${esc((e.pa || [])[j] ?? "")}">`).join("")}</div></td></tr>` : ""}`).join("")}</tbody></table>` : `<p class="muted small">Nenhum exame adicionado.</p>`;
     $("#itensEx").querySelectorAll(".ip").forEach((s) => (s.onchange = () => { lerItens(); desenhar(); }));
-    $("#itensEx").querySelectorAll(".ilab").forEach((s) => (s.onchange = () => { lerItens(); desenhar(); }));
+    $("#itensEx").querySelectorAll(".ilab").forEach((s) => (s.onchange = () => { lerItens();
+      itens.forEach((e) => { if (isPrest(e) || (e.composicao || []).length) return; const k = avulsos.find((z) => chave(z.nome) === chave(e.nome) && z.laboratorio === e.laboratorio);
+        if (k && (e.catId || "") !== (k.catId || k.id)) Object.assign(e, { catId: k.catId || k.id, valor: k.valor || 0, tubos: k.tubos || null, analitos: k.analitos || 0, prazo: k.prazo || "" }); });
+      desenhar(); }));
     $("#itensEx").querySelectorAll("[data-rmk]").forEach((b) => (b.onclick = () => { lerItens(); itens.splice(b.dataset.rmk, 1); desenhar(); }));
     rodape();
   }
@@ -1315,16 +1322,18 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
         <div style="margin-top:6px"><b>Total:</b> ${Object.entries(tb.total).filter(([, n]) => n).map(([c, n]) => `<span class="tubo-bol" style="background:${COR_TUBO[c][1]}"></span> ${n} ${COR_TUBO[c][0]}`).join(" &nbsp; ") || "—"}</div></div>` : "");
   }
   function buscar() {
-    const q = norm($("#addCat").value).split(/\s+/).filter(Boolean), nl = (c) => norm(`${c.nome} ${c.laboratorio || ""} ${c.categoria || ""} ${(c.profs || []).map((p) => p.p).join(" ")}`);
+    const q = norm($("#addCat").value).split(/\s+/).filter(Boolean), nl = (c) => norm(`${c.nome} ${c.laboratorio || ""} ${c.categoria || ""} ${(c.profs || []).map((p) => p.p).join(" ")} ${(c.variantes || []).map((v) => v.laboratorio).join(" ")} ${(c.composicao || []).join(" ")}`);
     const r = lista.filter((c) => modoAdd && isPrest(c) === (modoAdd === "Imagem") && (() => { const t = nl(c); return q.every((w) => t.includes(w)); })());
-    $("#resCat").innerHTML = r.map((c) => `<button type="button" class="res-item" data-id="${esc(c.id)}"><b>${esc(c.nome)}</b> <span class="tag neutro">${esc(isPrest(c) ? "Imagem" : c.laboratorio)}</span> <span class="muted small">${c.profs?.length ? esc(c.profs.map((p) => p.p).join(", ")) + " · " : ""}${esc(c.tipo && c.tipo !== "individual" ? c.tipo + " · " : "")}${c.profs?.length ? "" : "⏱ " + esc(prazoDe(c, isPrest(c)))}</span>${c.valor ? `<span style="float:right">${brl(c.valor)}</span>` : ""}</button>`).join("") || `<p class="muted small">Nada encontrado na lista.</p>`;
+    $("#resCat").innerHTML = r.map((c) => `<button type="button" class="res-item" data-id="${esc(c.id)}"><b>${esc(c.nome)}</b> ${c.variantes ? c.variantes.map((v) => `<span class="tag neutro">${esc(v.laboratorio)}</span>`).join(" ") : `<span class="tag neutro">${esc(isPrest(c) ? "Imagem" : c.laboratorio)}</span>`} <span class="muted small">${c.profs?.length ? esc(c.profs.map((p) => p.p).join(", ")) + " · " : ""}${esc(c.tipo && c.tipo !== "individual" ? c.tipo + " · " : "")}${c.profs?.length ? "" : "⏱ " + esc(prazoDe(c, isPrest(c)))}</span>${c.valor ? `<span style="float:right">${brl(c.valor)}</span>` : ""}${!c.variantes && (c.composicao || []).length ? `<div class="small" style="margin-top:3px"><b>Inclui:</b> ${c.composicao.map(esc).join(" · ")}</div>` : ""}</button>`).join("") || `<p class="muted small">Nada encontrado na lista.</p>`;
   }
   $("#addCat").oninput = buscar;
   $("#resCat").onclick = (e) => {
     const b = e.target.closest("[data-id]"); if (!b) return; const c = lista.find((c) => c.id === b.dataset.id); if (!c) return;
     pend = c; const bx = $("#pendBox"); bx.classList.remove("hidden");
     const ehPerfil = !isPrest(c) && ["perfil", "painel"].includes(c.tipo) && (c.composicao || []).length;
-    bx.innerHTML = `<b>${esc(c.nome)}</b> <span class="tag neutro">${esc(isPrest(c) ? "Imagem" : c.laboratorio)}</span>
+    bx.innerHTML = `<b>${esc(c.nome)}</b> <span class="tag neutro">${esc(isPrest(c) ? "Imagem" : c.variantes ? "avulso" : c.laboratorio)}</span>
+      ${c.variantes ? `<label>Laboratório que vai fazer<select id="pgLab">${c.variantes.map((v) => `<option value="${esc(v.laboratorio)}">${esc(v.laboratorio)}${v.valor ? " — " + brl(v.valor) : ""}${v.prazo ? " · " + esc(v.prazo) : ""}</option>`).join("")}</select></label>` : ""}
+      ${!c.variantes && (c.composicao || []).length ? `<div class="small"><b>Este ${esc(c.tipo)} inclui ${c.composicao.length} exames:</b> ${c.composicao.map(esc).join(" · ")}</div>` : ""}
       ${isPrest(c) ? `<label>Profissional que realiza<select id="pgProf"></select></label>` : ""}
       <div class="duas"><label>Este exame é<select id="pgTipo"><option>Particular</option><option value="Plano">Plano de saúde</option></select></label>
       <label id="pgPlanoBox" class="hidden">Qual plano<select id="pgPlano">${opts(CONVENIOS, "")}</select></label></div>
@@ -1336,14 +1345,14 @@ async function modalExame(x = {}, profs = [], cfg = {}) {
     $("#pgTipo").onchange = mudou; mudou();
     $("#pgNao").onclick = () => { pend = null; bx.classList.add("hidden"); };
     $("#pgOk").onclick = () => { const pl = $("#pgTipo").value === "Plano", pg = { pagamento: pl ? "Convênio" : "Particular", convenio: pl ? $("#pgPlano").value : "" }, quando = $("#dtColeta").value || agoraLocal();
-      const prof = isPrest(c) ? $("#pgProf").value : ""; if (isPrest(c) && !prof) return toast("Escolha o profissional que realiza o exame.");
+      const k0 = c.variantes ? (c.variantes.find((v) => v.laboratorio === $("#pgLab").value) || c.variantes[0]) : c, prof = isPrest(c) ? $("#pgProf").value : ""; if (isPrest(c) && !prof) return toast("Escolha o profissional que realiza o exame.");
       const base = (k, extra = {}) => ({ realizadoEm: quando, catId: k.catId || k.id, nome: k.nome, grupo: k.grupo, realizadoPor: prof, laboratorio: isPrest(k) ? "" : k.laboratorio, pontos: Number(k.pontos || 1), ...pg, valor: k.valor || 0, tubos: k.tubos || null, analitos: k.analitos || 0, prazo: k.prazo || "", composicao: k.composicao || [], coleta: isPrest(k) ? null : { status: "Aguardando" }, ...extra });
       lerItens(); let faltou = [];
       if (pl && ehPerfil) { // plano: um por um (individuais, do mesmo laboratório quando existir)
         const indiv = cat.filter((k) => !isPrest(k) && k.tipo === "individual");
         c.composicao.forEach((nm) => { const ch = chave(nm), ok = indiv.filter((k) => chave(k.nome) === ch); const k = ok.find((z) => z.laboratorio === c.laboratorio) || [...ok].sort((p, q) => p.valor - q.valor)[0];
           if (k) itens.push(base(k, { obsPerfil: c.nome })); else faltou.push(nm); });
-      } else { const v = c.profs?.find((x) => x.p === prof)?.valor; itens.push(base(c, v ? { valor: v } : {})); }
+      } else { const v = c.profs?.find((x) => x.p === prof)?.valor; itens.push(base(k0, v ? { valor: v } : {})); }
       if (pl && LABS_PLANO?.length) itens.forEach((e) => { if (e.pagamento === "Convênio" && !isPrest(e) && !LABS_PLANO.includes(e.laboratorio)) e.laboratorio = LABS_PLANO[0]; });
       pend = null; bx.classList.add("hidden"); $("#addCat").value = ""; buscar(); desenhar();
       toast(faltou.length ? `Incluído. Sem exame avulso para: ${faltou.join(", ")} — inclua à mão.` : "Exame incluído. Pode escolher o próximo."); };
@@ -1689,16 +1698,16 @@ async function emitirLaudo(x, e, k, profs) {
   $("#lMod").onchange = aplicar; $("#lProf").onchange = aplicar; $("#lAbre").onchange = aplicar; aplicar();
 }
 const LAUDO_CSS = `*{box-sizing:border-box}body{font-family:"Segoe UI",Roboto,Arial,sans-serif;font-size:12.5px;color:#1f2d3d;max-width:186mm;margin:0 auto;background:#fff}
- .topo{height:7px;background:linear-gradient(90deg,#0b3d91,#1e88e5 60%,#26c6da);border-radius:0 0 6px 6px}
+ .topo{height:16px;background:linear-gradient(90deg,#0b3d91,#1e88e5 60%,#26c6da);border-radius:0 0 6px 6px}
  .lh{display:flex;align-items:center;gap:16px;padding:14px 0 12px;border-bottom:1px solid #dbe5f1}
  .lh img{max-height:74px;max-width:140px;object-fit:contain}
  .lh .tit{flex:1;border-left:3px solid #1e88e5;padding-left:14px}.lh .tit small{display:block;letter-spacing:3px;color:#1e88e5;font-weight:700;font-size:10px}
- .lh .tit h1{margin:2px 0 0;font-size:23px;line-height:1.15;color:#0b2e63;text-align:left;font-weight:700}
+ .lh .tit h1{margin:2px 0 0;font-size:26px;line-height:1.15;color:#0b2e63;text-align:left;font-weight:700}
  .clin{margin-top:6px;font-size:10.5px;color:#5b6b7f;line-height:1.5}
- .pac{display:grid;grid-template-columns:1fr 1fr;gap:6px 22px;background:#f3f7fc;border:1px solid #dbe5f1;border-radius:10px;padding:11px 14px;margin:14px 0 6px;font-size:11.5px}
+ .pac{border-left:5px solid #1e88e5;display:grid;grid-template-columns:1fr 1fr;gap:6px 22px;background:#f3f7fc;border:1px solid #dbe5f1;border-radius:10px;padding:11px 14px;margin:14px 0 6px;font-size:11.5px}
  .pac span{display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;color:#6b7c93}.pac b{font-size:13px;color:#10284d;font-weight:600}
- .res{line-height:1.65;font-size:13px;margin-top:10px}
- .res h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#0b3d91;margin:16px 0 5px;padding:3px 0 3px 10px;border-left:4px solid #1e88e5;background:linear-gradient(90deg,#eaf3fd,transparent)}
+ .res{line-height:1.7;font-size:13px;margin-top:12px;padding:6px 16px 14px;border:1px solid #dbe5f1;border-radius:12px;background:#fcfdff;box-shadow:0 2px 8px rgba(11,61,145,.06)}
+ .res h2{font-size:11.5px;text-transform:uppercase;letter-spacing:1.2px;color:#fff;margin:18px 0 8px;padding:6px 12px;border-radius:6px;background:linear-gradient(90deg,#0b3d91,#1e88e5)}
  .res p{margin:3px 0}.res .k{font-weight:600;color:#12315f}
  .imgs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}.imgs img{width:100%;max-height:250px;object-fit:contain;border:1px solid #dbe5f1;border-radius:8px;padding:4px;background:#fafcff}
  .datas{font-size:10.5px;color:#6b7c93;text-align:right;margin-top:18px}
@@ -2838,33 +2847,37 @@ async function telaRepasses(v) {
   v.innerHTML = `<div class="barra"><h2>Repasse ou venda</h2><button class="btn primary" id="rpNovo">+ Novo repasse / venda</button>
     <input id="rpB" placeholder="Buscar pessoa, empresa ou produto…" value="${esc(filtroRp.busca)}"><select id="rpS"><option value="aberto">Em aberto (com a pessoa/empresa)</option><option value="todos">Todos</option><option>Devolvido</option><option>Vendido</option></select></div>
   <p class="muted small">Use quando um produto do estoque sai emprestado ou vendido. Ele é retirado do estoque na hora e fica anotado aqui até a devolução ou a venda ser confirmada.</p>
-  <div class="tabela-wrap"><table><thead><tr><th>Retirado em</th><th>Produto</th><th>Tipo</th><th>Pessoa / empresa</th><th>Quem buscou</th><th>Situação</th><th></th></tr></thead><tbody id="rpTb"></tbody></table></div>`;
+  <div class="tabela-wrap"><table><thead><tr><th>Retirado em</th><th>Produto</th><th>Tipo</th><th>Pessoa / empresa</th><th>Quem buscou</th><th>Prazo</th><th>Situação</th><th></th></tr></thead><tbody id="rpTb"></tbody></table></div>`;
   $("#rpS").value = filtroRp.status;
   const des = () => { const b = norm(filtroRp.busca), st = filtroRp.status;
     $("#rpTb").innerHTML = todos.filter((r) => (!b || norm(`${r.destinatario} ${r.produtoNome} ${r.quemBuscou}`).includes(b)) && (st === "todos" || (st === "aberto" ? r.status === "Em aberto" : r.status === st)))
-      .map((r) => `<tr><td class="small">${esc(String(r.retiradoEm || "").replace("T", " ").slice(0, 16))}</td><td><b>${esc(r.produtoNome)}</b><div class="muted small">${esc(r.qtd)} ${esc(r.medida || "")}${r.valor ? " · " + brl(r.valor) : ""}</div></td>
+      .map((r) => `<tr><td class="small">${esc(String(r.retiradoEm || "").replace("T", " ").slice(0, 16))}</td><td><b>${esc(r.produtoNome)}</b>${r.externo ? ` <span class="tag neutro">externo</span>` : ""}<div class="muted small">${esc(r.qtd)} ${esc(r.medida || "")}${r.valor ? " · " + brl(r.valor) : ""}</div></td>
       <td><span class="tag ${r.tipo === "Venda" ? "ok" : "alerta"}">${esc(r.tipo)}</span></td><td>${esc(r.destinatario)}<div class="muted small">${esc(r.tipoDest || "")}${r.contato ? " · " + esc(r.contato) : ""}</div></td>
-      <td class="small">${esc(r.quemBuscou)}${r.obs ? `<div class="muted">${esc(r.obs)}</div>` : ""}</td><td><span class="tag ${r.status === "Em aberto" ? "alerta" : "ok"}">${esc(r.status)}</span>${r.fechadoEm ? `<div class="muted small">${esc(String(r.fechadoEm).replace("T", " ").slice(0, 16))}</div>` : ""}</td>
+      <td class="small">${esc(r.quemBuscou)}${r.obs ? `<div class="muted">${esc(r.obs)}</div>` : ""}</td><td class="small">${r.prazo && r.status === "Em aberto" ? `${esc(r.prazoTipo || "")} até ${esc(r.prazo.split("-").reverse().join("/"))}${r.prazo < agoraLocal().slice(0, 10) ? ` <span class="tag alerta" style="background:#fde0e0;color:#a11">ATRASADO</span>` : ""}` : "—"}</td><td><span class="tag ${r.status === "Em aberto" ? "alerta" : "ok"}">${esc(r.status)}</span>${r.fechadoEm ? `<div class="muted small">${esc(String(r.fechadoEm).replace("T", " ").slice(0, 16))}</div>` : ""}</td>
       <td class="acoes-linha">${r.status === "Em aberto" ? `${r.tipo === "Empréstimo" ? `<button class="btn small primary" data-dev="${r.id}">Voltou ao estoque</button>` : ""}<button class="btn small" data-ven="${r.id}">${r.tipo === "Venda" ? "Venda concluída" : "Virou venda"}</button>` : ""}${isMaster() ? `<button class="btn small danger" data-del="${r.id}">Excluir</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="7" class="muted">Nada por aqui.</td></tr>`; };
   des(); $("#rpB").oninput = (e) => { filtroRp.busca = e.target.value; des(); }; $("#rpS").onchange = (e) => { filtroRp.status = e.target.value; des(); };
   $("#rpNovo").onclick = () => abrirModal("Novo repasse ou venda", `
-    <label>Produto do estoque<select name="produto" required><option value="">— escolha —</option>${produtos.map((p) => `<option value="${p.id}">${esc(p.nome)}</option>`).join("")}</select></label>
+    <label>Produto do estoque<select name="produto" required><option value="">— escolha —</option><option value="__ext__">➕ Item EXTERNO (não está no estoque)</option>${produtos.map((p) => `<option value="${p.id}">${esc(p.nome)}</option>`).join("")}</select></label>
+    <label id="rpExtBox" class="hidden">Nome do item externo<input name="itemExterno" placeholder="ex.: autoclave emprestada, caixa de luvas da clínica X…"></label>
     <div class="duas"><label>Quantidade<input name="qtd" type="number" min="0.01" step="any" required></label><label>Tipo<select name="tipo"><option>Empréstimo</option><option>Venda</option></select></label></div>
     <div class="duas"><label>Para<select name="tipoDest"><option>Pessoa</option><option>Empresa</option></select></label><label>Nome da pessoa ou empresa<input name="destinatario" required></label></div>
     <div class="duas"><label>Contato (telefone)<input name="contato"></label><label>Valor da venda (opcional)<input name="valor" type="number" step="0.01" min="0"></label></div>
     <label>Quem veio buscar (ex.: motoboy João, Uber, a própria pessoa…)<input name="quemBuscou" required></label>
     <label>📅 Data e hora da retirada<input type="datetime-local" name="retiradoEm" required value="${agoraLocal()}"></label>
+    <div class="duas"><label>📅 Prazo (devolver ou pagar até)<input type="date" name="prazo"></label><label>O prazo é para…<select name="prazoTipo"><option>Devolver</option><option>Pagar</option></select></label></div>
     <label>Observações<textarea name="obs" rows="2"></textarea></label>`,
-  async (f) => { const p = produtos.find((x) => x.id === f.produto), qtd = Number(f.qtd); let retirados = [];
-    await runTransaction(db, async (t) => { const ref = doc(db, "produtos", p.id), pd = (await t.get(ref)).data(), r = retirarFEFO(pd.lotesEstoque, qtd); retirados = r.retirados; t.update(ref, { lotesEstoque: r.lotes }); });
+  async (f) => { const ext = f.produto === "__ext__", p = ext ? { id: "", nome: (f.itemExterno || "").trim(), medida: "" } : produtos.find((x) => x.id === f.produto), qtd = Number(f.qtd); let retirados = [];
+    if (!p.nome) throw new Error("Escolha o produto ou digite o nome do item externo.");
+    if (!ext) await runTransaction(db, async (t) => { const ref = doc(db, "produtos", p.id), pd = (await t.get(ref)).data(), r = retirarFEFO(pd.lotesEstoque, qtd); retirados = r.retirados; t.update(ref, { lotesEstoque: r.lotes }); });
     await addDoc(collection(db, "repasses"), JSON.parse(JSON.stringify({ produtoId: p.id, produtoNome: p.nome, medida: p.medida || "", qtd, tipo: f.tipo, tipoDest: f.tipoDest, destinatario: f.destinatario.trim(), contato: f.contato, valor: Number(f.valor) || 0,
-      quemBuscou: f.quemBuscou.trim(), retiradoEm: f.retiradoEm, obs: f.obs, lotes: retirados, status: "Em aberto", criadoPor: usuario.nome, criadoUid: usuario.uid, criadoEm: serverTimestamp() })));
-    await log({ tipo: "repasse", produtoId: p.id, produtoNome: p.nome, qtd, obs: `${f.tipo} para ${f.destinatario}` }); toast("Retirado do estoque e anotado."); render(); }, "Retirar do estoque e anotar");
+      quemBuscou: f.quemBuscou.trim(), retiradoEm: f.retiradoEm, obs: f.obs, lotes: retirados, externo: ext, prazo: f.prazo || "", prazoTipo: f.prazoTipo, status: "Em aberto", criadoPor: usuario.nome, criadoUid: usuario.uid, criadoEm: serverTimestamp() })));
+    if (!ext) await log({ tipo: "repasse", produtoId: p.id, produtoNome: p.nome, qtd, obs: `${f.tipo} para ${f.destinatario}` }); toast(ext ? "Item externo anotado." : "Retirado do estoque e anotado."); render(); }, "Retirar do estoque / anotar");
+  $("#rpNovo").addEventListener("click", () => setTimeout(() => { const sel = document.querySelector("#modalCorpo [name=produto]"); if (sel) sel.onchange = () => $("#rpExtBox").classList.toggle("hidden", sel.value !== "__ext__"); }, 0));
   $("#rpTb").onclick = async (e) => { const b = e.target.closest("button"); if (!b) return; const r = todos.find((x) => x.id === (b.dataset.dev || b.dataset.ven || b.dataset.del)); if (!r) return;
     if (b.dataset.del) { if (confirm("Excluir este registro? O estoque NÃO volta sozinho.")) { await deleteDoc(doc(db, "repasses", r.id)); render(); } return; }
     if (b.dataset.dev) { if (!confirm(`Confirmar que ${r.qtd} ${r.produtoNome} voltou ao estoque?`)) return;
-      await runTransaction(db, async (t) => { const ref = doc(db, "produtos", r.produtoId), pd = (await t.get(ref)).data(); let lotes = pd.lotesEstoque || []; (r.lotes || []).forEach((x) => (lotes = addLote(lotes, x.qtd, x.validade))); t.update(ref, { lotesEstoque: lotes }); });
-      await updateDoc(doc(db, "repasses", r.id), { status: "Devolvido", fechadoEm: agoraLocal(), fechadoPor: usuario.nome }); await log({ tipo: "repasse", produtoId: r.produtoId, produtoNome: r.produtoNome, qtd: r.qtd, obs: "Devolução de " + r.destinatario }); toast("Voltou ao estoque."); return render(); }
+      if (!r.externo) await runTransaction(db, async (t) => { const ref = doc(db, "produtos", r.produtoId), pd = (await t.get(ref)).data(); let lotes = pd.lotesEstoque || []; (r.lotes || []).forEach((x) => (lotes = addLote(lotes, x.qtd, x.validade))); t.update(ref, { lotesEstoque: lotes }); });
+      await updateDoc(doc(db, "repasses", r.id), { status: "Devolvido", fechadoEm: agoraLocal(), fechadoPor: usuario.nome }); if (!r.externo) await log({ tipo: "repasse", produtoId: r.produtoId, produtoNome: r.produtoNome, qtd: r.qtd, obs: "Devolução de " + r.destinatario }); toast(r.externo ? "Devolução anotada." : "Voltou ao estoque."); return render(); }
     if (b.dataset.ven) { if (!confirm("Marcar como vendido (o produto não volta ao estoque)?")) return; await updateDoc(doc(db, "repasses", r.id), { status: "Vendido", tipo: "Venda", fechadoEm: agoraLocal(), fechadoPor: usuario.nome }); toast("Venda registrada."); render(); } };
 }
 

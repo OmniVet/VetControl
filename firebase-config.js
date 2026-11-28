@@ -130,7 +130,8 @@ export const CARGOS = [
   { id: "auxiliar", nome: "Auxiliar", clt: true },
   { id: "gerente", nome: "Gerente", clt: true },
   { id: "recepcao", nome: "Recepção", clt: true },
-  { id: "assistente", nome: "Assistente operacional", clt: true }
+  { id: "assistente", nome: "Assistente operacional", clt: true },
+  { id: "limpeza", nome: "Limpeza geral", clt: true }
 ];
 
 // Quem pode aparecer como "Realizado por" nos exames de imagem (médicos ou empresas). Edite à vontade.
