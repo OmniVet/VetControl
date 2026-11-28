@@ -86,20 +86,20 @@ export function fichaDoCargo(cargo) {
 // ===== Descrições de cargo =====
 const COMUM_LIMITES = ["Alterações nas condições deste cargo só valem por mútuo consentimento e sem prejuízo ao empregado (art. 468 da CLT).", "Esta descrição integra o contrato de trabalho e deve ser revisada sempre que a rotina mudar.", "Dados de tutores e pacientes são confidenciais e tratados conforme a LGPD (Lei nº 13.709/2018)."];
 const REGIME = "CLT — contrato de trabalho por prazo indeterminado, podendo ser precedido de contrato de experiência de até 90 dias";
-const RECEPCAO_NO_AUX = { titulo: "3.10 Recepção, atendimento ao cliente e pagamentos", itens: [
-  "Permanecer na recepção nos períodos definidos pela gerência, desempenhando as atividades de recepção sempre que escalado(a).",
-  "Receber tutores e pacientes com cordialidade, identificar o motivo da visita, cadastrar ou atualizar tutor e paciente e encaminhar ao atendimento.",
-  "Atender o telefone e o WhatsApp da clínica, prestar informações corretas e registrar recados e solicitações.",
-  "Marcar, confirmar, remarcar e cancelar consultas, exames, retornos e cirurgias na agenda, conferindo data, horário, profissional e preparo do paciente (jejum etc.).",
-  "Orientar o tutor sobre documentos, termos e preparos, e conferir assinaturas antes do atendimento.",
-  "Receber pagamentos (dinheiro, Pix, cartão e planos de saúde), emitir recibo ou nota, lançar no sistema e conferir o caixa ao final do turno.",
-  "Realizar cobranças de forma educada, clara e dentro da política da clínica; registrar pendências e informar a gerência sobre inadimplência.",
-  "Apresentar ao tutor somente os valores e orçamentos autorizados pela clínica e pelo médico veterinário responsável.",
-  "Separar corretamente atendimentos particulares e de planos de saúde, e lançar serviços e produtos no sistema.",
-  "Zelar pela organização e limpeza da recepção e tratar clientes e pacientes com empatia, sigilo e respeito."] };
+const RECEPCAO_NO_AUX = { titulo: "3.10 Atuação na recepção (parte da função do Auxiliar Veterinário)", itens: [
+  "ATENÇÃO: o Auxiliar Veterinário também trabalha e desenvolve atividades na RECEPÇÃO, nos períodos e escalas definidos pela gerência. Não é função só de bastidores da clínica.",
+  "ATENDER: receber tutores e pacientes com cordialidade, identificar o motivo da visita, pesar o pet, cadastrar ou atualizar tutor e paciente e encaminhar ao atendimento; atender telefone, WhatsApp e e-mail da clínica, prestar informações corretas e registrar recados.",
+  "AGENDAR: marcar, confirmar, remarcar e cancelar consultas, exames, retornos e cirurgias, conferindo data, horário, profissional e preparo (jejum etc.); avisar os tutores na véspera de vacinação e cirurgia.",
+  "VENDER: apresentar somente serviços, produtos e orçamentos nos valores autorizados; separar atendimento particular e de plano de saúde; vender produtos e serviços e lançar tudo no sistema.",
+  "LANÇAR NO SISTEMA: faturar todos os atendimentos, produtos e exames no sistema da clínica, indicando a forma de pagamento e a maquininha utilizada.",
+  "RECEBER E COBRAR: receber pagamentos (dinheiro, Pix, cartão, link e planos) ANTES do atendimento, emitir recibo e solicitar nota fiscal ao financeiro quando o cliente pedir; fazer cobranças de forma educada e dentro da política da clínica.",
+  "ABERTURA E FECHAMENTO DE CAIXA: na abertura, ligar e conferir maquininhas e o valor inicial do caixa; no fechamento, conferir dinheiro, cartão e Pix, elaborar o relatório do dia, apontar divergências e entregar relatório e valores ao financeiro.",
+  "ENVIAR EXAMES: anexar os resultados no sistema e enviá-los aos tutores e aos médicos solicitantes; entregar laudos e prontuários somente ao responsável pelo animal (sigilo e LGPD).",
+  "Orientar o tutor sobre termos (TCLE), documentos e preparos e conferir assinaturas antes do atendimento; conferir se as salas estão limpas e organizadas antes de iniciar os atendimentos.",
+  "Manter a recepção organizada e tratar clientes e pacientes com empatia, sigilo e respeito."] };
 
 export const DESCRICOES = {
-  auxiliar: { nome: "Auxiliar Veterinário", cbo: "5193-05 – Auxiliar de veterinário", setor: "Clínica, internamento, centro cirúrgico, sala de coleta e recepção", superior: "Médico(a) Veterinário(a) Responsável Técnico(a) e Gerência", regime: REGIME + " (arts. 2º, 3º, 443 e 445 da CLT)",
+  auxiliar: { nome: "Auxiliar Veterinário", cbo: "5193-05 – Auxiliar de veterinário", setor: "Clínica, internamento, centro cirúrgico, sala de coleta e RECEPÇÃO (atende, vende, lança no sistema, abre e fecha o caixa, envia exames)", superior: "Médico(a) Veterinário(a) Responsável Técnico(a) e Gerência", regime: REGIME + " (arts. 2º, 3º, 443 e 445 da CLT)",
     jornada: "44 horas semanais: segunda a sexta, 08h às 12h e 14h às 18h, com 2h de intervalo; sábado, 08h às 12h. Controle de ponto pelo próprio empregado (art. 74, § 2º, da CLT).", remuneracao: "Conforme contrato e piso da Convenção Coletiva da categoria aplicável. Adicional de insalubridade conforme laudo técnico.",
     missao: "Apoiar o médico veterinário no atendimento, internação, cirurgia e coleta de exames e, também, na recepção da clínica, garantindo o bem-estar dos pacientes, a biossegurança, a boa experiência dos tutores e a correta documentação e cobrança dos procedimentos. Todas as atividades clínicas são executadas sob orientação e supervisão do médico veterinário, a quem cabem os atos privativos da profissão (Lei nº 5.517/1968).",
     atribuicoes: [
